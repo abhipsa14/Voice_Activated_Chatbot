@@ -1,20 +1,29 @@
 [Unit]
 Description=UIT Prayagraj Chatbot - Always-On Voice Q&A Service
-After=network.target sound.target pulseaudio.service
-Wants=pulseaudio.service
+After=network-online.target sound.target pulseaudio.service
+Wants=network-online.target pulseaudio.service
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/chatbot
-ExecStart=/home/pi/chatbot/.venv/bin/python /home/pi/chatbot/chatbot.py --daemon
+User=unitedpi
+Group=unitedpi
+WorkingDirectory=/home/unitedpi/chatbot
+ExecStart=/home/unitedpi/chatbot/.venv/bin/python /home/unitedpi/chatbot/chatbot.py --daemon
 Restart=on-failure
-RestartSec=5
-StandardInput=tty
-TTYPath=/dev/tty1
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# ── Audio access ──────────────────────────────────────────────────────
+# PulseAudio runs per-user; point the service to the user's PA socket.
+# The %U / id trick is replaced by setup_pi.sh with the actual UID.
 Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+# ── General ───────────────────────────────────────────────────────────
 Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

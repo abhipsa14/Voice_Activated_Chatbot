@@ -79,13 +79,21 @@ echo "⚙️  [5/5] Installing systemd service..."
 # Add user to audio group for mic/speaker access
 sudo usermod -aG audio "${CURRENT_USER}" 2>/dev/null || true
 
-# Update service file with actual paths and username
+# Ensure PulseAudio runs at login (needed for the service to access audio)
+systemctl --user enable pulseaudio.service 2>/dev/null || true
+systemctl --user start pulseaudio.service 2>/dev/null || true
+
+# Enable lingering so user services (PulseAudio) stay alive after logout
+sudo loginctl enable-linger "${CURRENT_USER}" 2>/dev/null || true
+
+# Update service file with actual paths, username, and UID
+USER_UID="$(id -u)"
 TEMP_SERVICE="/tmp/${SERVICE_NAME}.service"
-sed -e "s|User=pi|User=${CURRENT_USER}|g" \
-    -e "s|Group=pi|Group=${CURRENT_USER}|g" \
+sed -e "s|User=unitedpi|User=${CURRENT_USER}|g" \
+    -e "s|Group=unitedpi|Group=${CURRENT_USER}|g" \
     -e "s|WorkingDirectory=.*|WorkingDirectory=${INSTALL_DIR}|g" \
-    -e "s|ExecStart=.*|ExecStart=${VENV_DIR}/bin/python ${INSTALL_DIR}/chatbot.py --voice|g" \
-    -e "s|/run/user/1000/|/run/user/$(id -u)/|g" \
+    -e "s|ExecStart=.*|ExecStart=${VENV_DIR}/bin/python ${INSTALL_DIR}/chatbot.py --daemon|g" \
+    -e "s|/run/user/1000/|/run/user/${USER_UID}/|g" \
     "${SERVICE_FILE}" > "${TEMP_SERVICE}"
 
 sudo cp "${TEMP_SERVICE}" "/etc/systemd/system/${SERVICE_NAME}.service"
