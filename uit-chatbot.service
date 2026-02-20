@@ -1,5 +1,5 @@
 [Unit]
-Description=UIT Prayagraj Chatbot - Voice Q&A Service
+Description=UIT Prayagraj Chatbot - Always-On Voice Q&A Service
 After=network.target sound.target pulseaudio.service
 Wants=pulseaudio.service
 
@@ -8,7 +8,7 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/chatbot
-ExecStart=/home/pi/chatbot/.venv/bin/python /home/pi/chatbot/chatbot.py --voice
+ExecStart=/home/pi/chatbot/.venv/bin/python /home/pi/chatbot/chatbot.py --daemon
 Restart=on-failure
 RestartSec=5
 StandardInput=tty

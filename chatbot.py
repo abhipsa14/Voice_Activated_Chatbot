@@ -2,14 +2,18 @@
 UIT Prayagraj Chatbot
 ---------------------
 An interactive Q&A chatbot that loads knowledge from a JSON file
-(generated from uit.txt) and uses TF-IDF + cosine-similarity to
-find the best matching answer for any user question.
+(generated from uit.txt) and uses TF-IDF + cosine-similarity + fuzzy
+matching to find the best answer for any user question.
+
+Supports a wake-word mode ("Hey UIT") for always-on hands-free operation
+on Raspberry Pi.
 
 Usage:
     python chatbot.py              # text-only mode
-    python chatbot.py --voice      # voice mode (speak answers + listen via mic)
+    python chatbot.py --voice      # voice mode (mic + speaker)
     python chatbot.py --tts        # text input, spoken answers
     python chatbot.py --stt        # voice input, text answers
+    python chatbot.py --daemon     # always-on: waits for "Hey UIT" wake word
 """
 
 import json
@@ -40,25 +44,30 @@ STOP_WORDS = {
 
 # ── Synonym / alias mapping for domain-specific terms ──────────────────
 SYNONYMS = {
-    "principal": ["principal", "head"],
-    "placement": ["placement", "placements", "recruit", "recruitment", "job", "jobs", "career"],
-    "hostel": ["hostel", "hostels", "accommodation", "stay", "boarding"],
-    "library": ["library", "books", "reading"],
-    "wifi": ["wifi", "wi-fi", "internet", "network"],
-    "lab": ["lab", "labs", "laboratory", "laboratories", "computer"],
-    "admission": ["admission", "admissions", "enroll", "enrollment", "join"],
-    "ragging": ["ragging", "bully", "bullying", "harassment"],
-    "sports": ["sports", "games", "playground", "indoor", "outdoor"],
-    "research": ["research", "innovation", "startup", "startups"],
-    "erp": ["erp", "attendance", "registration"],
-    "cctv": ["cctv", "security", "surveillance", "camera"],
-    "seminar": ["seminar", "seminars", "auditorium", "hall"],
-    "club": ["club", "clubs", "society", "societies", "cultural", "technical"],
-    "workshop": ["workshop", "workshops", "fdp", "seminar"],
-    "result": ["result", "results", "exam", "examination", "marks", "grade"],
-    "uit": ["uit", "united institute", "united institute of technology"],
-    "aktu": ["aktu", "university", "kalam", "abdul kalam"],
-    "aicte": ["aicte", "approved", "approval"],
+    "principal": ["principal", "head", "director", "chief", "leader", "boss"],
+    "placement": ["placement", "placements", "recruit", "recruitment", "job", "jobs", "career", "hiring", "hire", "package", "salary", "offer"],
+    "hostel": ["hostel", "hostels", "accommodation", "stay", "boarding", "dormitory", "dorm", "rooms", "living"],
+    "library": ["library", "books", "reading", "study", "journal", "journals", "ebook"],
+    "wifi": ["wifi", "wi-fi", "internet", "network", "broadband", "connectivity", "online"],
+    "lab": ["lab", "labs", "laboratory", "laboratories", "computer", "computers", "system", "systems", "practical"],
+    "admission": ["admission", "admissions", "enroll", "enrollment", "join", "apply", "application", "entrance", "counseling", "counselling", "seat"],
+    "ragging": ["ragging", "bully", "bullying", "harassment", "anti-ragging", "antiragging", "safe", "safety"],
+    "sports": ["sports", "games", "playground", "indoor", "outdoor", "cricket", "football", "gym", "fitness", "athletic"],
+    "research": ["research", "innovation", "startup", "startups", "project", "projects", "paper", "papers", "publish"],
+    "erp": ["erp", "attendance", "registration", "portal", "online", "record", "records"],
+    "cctv": ["cctv", "security", "surveillance", "camera", "guard", "safe", "safety", "monitor"],
+    "seminar": ["seminar", "seminars", "auditorium", "hall", "conference", "event", "events"],
+    "club": ["club", "clubs", "society", "societies", "cultural", "technical", "fest", "festival", "extracurricular"],
+    "workshop": ["workshop", "workshops", "fdp", "seminar", "training", "program", "programme", "course"],
+    "result": ["result", "results", "exam", "examination", "marks", "grade", "grades", "cgpa", "sgpa", "score", "performance", "pass", "fail"],
+    "uit": ["uit", "united", "institute", "college", "campus", "prayagraj", "allahabad"],
+    "aktu": ["aktu", "university", "kalam", "abdul", "affiliated", "affiliation"],
+    "aicte": ["aicte", "approved", "approval", "recognized", "recognition", "accredited"],
+    "faculty": ["faculty", "teacher", "teachers", "professor", "professors", "staff", "hod", "dean", "academic"],
+    "smart": ["smart", "classroom", "classrooms", "digital", "projector", "board"],
+    "internship": ["internship", "internships", "intern", "industrial", "training", "experience"],
+    "discipline": ["discipline", "rules", "conduct", "behavior", "behaviour", "strict", "policy"],
+    "counseling": ["counseling", "counselling", "guidance", "mentor", "mentoring", "support", "help"],
 }
 
 
@@ -76,6 +85,35 @@ def expand_with_synonyms(tokens: list[str]) -> list[str]:
             if token in group:
                 expanded.extend(group)
     return list(set(expanded))
+
+
+# ── Fuzzy string helpers ───────────────────────────────────────────────
+def levenshtein(a: str, b: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(a) < len(b):
+        return levenshtein(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb)))
+        prev = curr
+    return prev[len(b)]
+
+
+def word_similarity(a: str, b: str) -> float:
+    """Return 0.0-1.0 similarity between two words."""
+    if a == b:
+        return 1.0
+    if a in b or b in a:
+        return 0.85
+    max_len = max(len(a), len(b))
+    if max_len == 0:
+        return 1.0
+    dist = levenshtein(a, b)
+    return max(0.0, 1.0 - dist / max_len)
 
 
 # ── TF-IDF helpers ─────────────────────────────────────────────────────
@@ -112,7 +150,7 @@ def cosine_sim(vec_a: dict, vec_b: dict) -> float:
 
 # ── Chatbot class ──────────────────────────────────────────────────────
 class UITChatbot:
-    SIMILARITY_THRESHOLD = 0.15
+    SIMILARITY_THRESHOLD = 0.08  # Lower threshold for more general matching
 
     def __init__(self, json_path: Path = JSON_FILE):
         self.kb = self._load_kb(json_path)
@@ -124,7 +162,6 @@ class UITChatbot:
     @staticmethod
     def _load_kb(path: Path) -> list[dict]:
         if not path.exists():
-            # Auto-generate from txt if JSON missing
             from parse_txt import parse_txt_to_json
             kb = parse_txt_to_json(TXT_FILE)
             path.write_text(json.dumps(kb, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -137,32 +174,59 @@ class UITChatbot:
         doc_len = len(tokens) or 1
         return {term: (count / doc_len) * self.idf.get(term, 1) for term, count in tf.items()}
 
+    def _keyword_score(self, query_tokens: list[str], doc_idx: int) -> float:
+        """
+        Fuzzy keyword overlap score: for each query token, find the best
+        matching token in the document using word similarity.
+        Returns 0.0-1.0.
+        """
+        doc_toks = self.doc_tokens[doc_idx]
+        if not query_tokens or not doc_toks:
+            return 0.0
+
+        total = 0.0
+        for qt in query_tokens:
+            best = max((word_similarity(qt, dt) for dt in doc_toks), default=0.0)
+            total += best
+
+        return total / len(query_tokens)
+
     def get_answer(self, user_input: str) -> str:
         if not user_input.strip():
             return "Please ask a question about UIT Prayagraj."
 
+        query_tokens = tokenize(user_input)
+        expanded_tokens = expand_with_synonyms(query_tokens)
         query_vec = self._query_vector(user_input)
-        scored = [
-            (cosine_sim(query_vec, dv), idx)
-            for idx, dv in enumerate(self.tfidf_vectors)
-        ]
-        scored.sort(reverse=True)
 
-        best_score, best_idx = scored[0]
+        scored = []
+        for idx, dv in enumerate(self.tfidf_vectors):
+            tfidf_score = cosine_sim(query_vec, dv)
+            kw_score = self._keyword_score(expanded_tokens, idx)
 
-        if best_score < self.SIMILARITY_THRESHOLD:
+            # Combined score: 60% TF-IDF + 40% fuzzy keyword
+            combined = 0.6 * tfidf_score + 0.4 * kw_score
+            scored.append((combined, tfidf_score, kw_score, idx))
+
+        scored.sort(reverse=True, key=lambda x: x[0])
+
+        best_combined, best_tfidf, best_kw, best_idx = scored[0]
+
+        if best_combined < self.SIMILARITY_THRESHOLD:
             return (
-                "Sorry, I don't have enough information to answer that. "
-                "Please ask something related to UIT Prayagraj."
+                "I'm not sure about that. Could you rephrase your question? "
+                "I can help with topics like admissions, placements, facilities, "
+                "faculty, hostel, sports, and more at UIT Prayagraj."
             )
 
         entry = self.kb[best_idx]
-
-        # If second-best is very close, include it too
         response = f"📌 {entry['answer']}"
+
+        # Include related answer if second-best is close
         if len(scored) > 1:
-            second_score, second_idx = scored[1]
-            if second_score > self.SIMILARITY_THRESHOLD and (best_score - second_score) < 0.05:
+            second_combined = scored[1][0]
+            second_idx = scored[1][3]
+            if second_combined > self.SIMILARITY_THRESHOLD and (best_combined - second_combined) < 0.08:
                 response += f"\n\nℹ️  Related: {self.kb[second_idx]['answer']}"
 
         return response
@@ -186,11 +250,110 @@ def parse_args():
         "--stt", action="store_true",
         help="Enable speech-to-text only (speak questions, read answers)",
     )
+    parser.add_argument(
+        "--daemon", action="store_true",
+        help="Always-on mode: listen for wake word 'Hey UIT', then answer",
+    )
+    parser.add_argument(
+        "--wake-word", type=str, default="hey uit",
+        help="Custom wake word/phrase (default: 'hey uit')",
+    )
     return parser.parse_args()
+
+
+def run_daemon(bot, tts_engine, stt_engine, wake_phrase: str):
+    """
+    Always-on daemon mode:
+      1. Wait passively for the wake word ("Hey UIT")
+      2. Play an acknowledgement sound / speak "Yes?"
+      3. Listen for the actual question
+      4. Answer it with voice
+      5. Go back to waiting
+    """
+    from wake_word import WakeWordDetector
+
+    detector = WakeWordDetector(
+        wake_phrase=wake_phrase,
+        alternative_phrases=["ok uit", "hello uit", "hi uit", "hey you it"],
+    )
+
+    if not detector.available:
+        print("❌ Wake word detection not available. Install: pip install openai-whisper PyAudio")
+        return
+
+    print("=" * 60)
+    print("  🎓  UIT Prayagraj Chatbot — DAEMON MODE")
+    print(f"  Wake word: \"{wake_phrase}\"")
+    print("  Say the wake word, then ask your question.")
+    print("  Say 'stop' or 'shutdown' to exit.")
+    print("  Press Ctrl+C to force quit.")
+    print("=" * 60)
+
+    print(f"\n✅ Loaded {len(bot.kb)} Q&A entries.")
+
+    if tts_engine:
+        tts_engine.speak("UIT chatbot is ready. Say Hey UIT to wake me up.")
+
+    print("\n💤 Waiting for wake word...\n")
+
+    while True:
+        try:
+            # Step 1: Wait for wake word
+            detected = detector.wait_for_wake_word()
+            if not detected:
+                continue
+
+            # Step 2: Acknowledge
+            print("🔔 Wake word detected!")
+            if tts_engine:
+                tts_engine.speak("Yes? How can I help you?")
+            else:
+                print("Bot: Yes? How can I help you?")
+
+            # Step 3: Listen for the question
+            question = None
+            if stt_engine:
+                question = stt_engine.listen("🎤 Listening for your question...")
+                if question:
+                    print(f"You: {question}")
+
+            if not question:
+                if tts_engine:
+                    tts_engine.speak("I didn't catch that. Say Hey UIT to try again.")
+                print("💤 Waiting for wake word...\n")
+                continue
+
+            # Check for shutdown commands
+            lower = question.lower().strip()
+            if lower in ("stop", "shutdown", "quit", "exit", "bye", "turn off", "shut down"):
+                farewell = "Goodbye! Shutting down."
+                print(f"Bot: {farewell}")
+                if tts_engine:
+                    tts_engine.speak(farewell)
+                break
+
+            # Step 4: Answer the question
+            answer = bot.get_answer(question)
+            print(f"\nBot: {answer}\n")
+            if tts_engine:
+                tts_engine.speak(answer)
+
+            print("💤 Waiting for wake word...\n")
+
+        except KeyboardInterrupt:
+            print("\n\nShutting down...")
+            if tts_engine:
+                tts_engine.speak("Goodbye!")
+            break
 
 
 def main():
     args = parse_args()
+
+    # Daemon mode implies full voice
+    if args.daemon:
+        args.voice = True
+
     use_tts = args.voice or args.tts
     use_stt = args.voice or args.stt
 
@@ -199,7 +362,7 @@ def main():
     if use_tts:
         try:
             from tts_module import TTSEngine
-            tts_engine = TTSEngine(rate=160, volume=1.0)
+            tts_engine = TTSEngine(voice="indian_female")
             if not tts_engine.available:
                 print("⚠️  TTS unavailable — falling back to text output.")
                 tts_engine = None
@@ -218,6 +381,14 @@ def main():
         except ImportError:
             print("⚠️  stt_module not found — falling back to text input.")
 
+    # ── Load chatbot ───────────────────────────────────────────────────
+    bot = UITChatbot()
+
+    # ── Daemon mode ────────────────────────────────────────────────────
+    if args.daemon:
+        run_daemon(bot, tts_engine, stt_engine, args.wake_word)
+        return
+
     # ── Banner ─────────────────────────────────────────────────────────
     mode = "TEXT"
     if use_tts and use_stt:
@@ -232,11 +403,12 @@ def main():
     print("  Ask any question about United Institute of Technology")
     print(f"  Mode: {mode}")
     print("  Type 'categories' to see topics | 'quit' to exit")
+    if tts_engine:
+        print("  Type 'voices' to see voice options | 'voice <name>' to change")
     if stt_engine:
         print("  Say 'quit' or 'exit' to stop | 'type' for keyboard")
     print("=" * 60)
 
-    bot = UITChatbot()
     print(f"\n✅ Loaded {len(bot.kb)} Q&A entries.\n")
 
     if tts_engine:
@@ -250,7 +422,6 @@ def main():
             if user_input:
                 print(f"You (voice): {user_input}")
             else:
-                # Fallback to keyboard on failed recognition
                 try:
                     user_input = input("You (keyboard): ").strip()
                 except (EOFError, KeyboardInterrupt):
@@ -277,7 +448,6 @@ def main():
             break
 
         if lower == "type":
-            # Temporarily use keyboard even in voice mode
             try:
                 user_input = input("You (keyboard): ").strip()
             except (EOFError, KeyboardInterrupt):
@@ -294,6 +464,20 @@ def main():
             print()
             if tts_engine:
                 tts_engine.speak("Available categories are: " + ", ".join(cats))
+            continue
+
+        if lower == "voices" and tts_engine:
+            print("\n🔊 Available voice presets:")
+            for v in tts_engine.list_voices():
+                print(f"   • {v}")
+            print("\n   Usage: type 'voice indian_male' to switch")
+            print()
+            continue
+
+        if lower.startswith("voice ") and tts_engine:
+            voice_name = user_input.split(" ", 1)[1].strip()
+            tts_engine.set_voice(voice_name)
+            tts_engine.speak(f"Voice changed. This is how I sound now.")
             continue
 
         # ── Get answer ─────────────────────────────────────────────────

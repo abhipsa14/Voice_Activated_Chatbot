@@ -4,25 +4,25 @@
 #
 # For voice features (TTS + STT), install the packages below:
 
-# ── Text-to-Speech (TTS) ──────────────────────
-pyttsx3                # Offline TTS engine (uses espeak on Pi / SAPI5 on Windows)
+# ── Text-to-Speech (TTS) — human-like neural voices ───
+edge-tts               # Microsoft Edge neural TTS (natural voice, free, needs internet)
+pygame                 # Audio playback for edge-tts output
+pyttsx3                # Offline fallback TTS (espeak on Pi / SAPI5 on Windows)
 
-# ── Speech-to-Text (STT) ──────────────────────
+# ── Speech-to-Text (STT) — accurate recognition ───────
+openai-whisper         # OpenAI Whisper — offline, highly accurate, handles accents
 SpeechRecognition      # Mic input + recognition framework
 PyAudio                # Microphone access (requires portaudio)
-vosk                   # Offline speech recognition (recommended for Raspberry Pi)
+
+# Optional STT backends:
+# vosk                 # Lighter offline alternative to Whisper
 
 # ──────────────────────────────────────────────
 # Raspberry Pi setup (run these on the Pi terminal):
 #
 #   sudo apt-get update
-#   sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac
-#   pip install pyttsx3 SpeechRecognition PyAudio vosk
-#
-#   # Download small Vosk model for offline STT (~40 MB):
-#   wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
-#   unzip vosk-model-small-en-us-0.15.zip
-#   mv vosk-model-small-en-us-0.15 vosk-model-small-en-us
+#   sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac ffmpeg
+#   pip install edge-tts pygame pyttsx3 openai-whisper SpeechRecognition PyAudio
 #
 # How to run:
 #   python chatbot.py              # text-only mode

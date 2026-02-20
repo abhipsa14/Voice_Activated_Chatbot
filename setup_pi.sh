@@ -3,10 +3,10 @@
 #  UIT Prayagraj Chatbot – Raspberry Pi Installer
 # ============================================================
 #  This script:
-#    1. Installs system dependencies (espeak, portaudio, flac)
+#    1. Installs system dependencies (espeak, portaudio, ffmpeg, flac)
 #    2. Creates a Python virtual environment
-#    3. Installs Python packages (pyttsx3, SpeechRecognition, etc.)
-#    4. Downloads the Vosk offline speech model (~40 MB)
+#    3. Installs Python packages (edge-tts, whisper, pygame, etc.)
+#    4. Downloads the Whisper speech model (~74 MB, first run)
 #    5. Installs & enables the systemd service
 #
 #  Usage:
@@ -23,9 +23,6 @@ INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="uit-chatbot"
 SERVICE_FILE="${INSTALL_DIR}/uit-chatbot.service"
 VENV_DIR="${INSTALL_DIR}/.venv"
-VOSK_MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-VOSK_MODEL_ZIP="vosk-model-small-en-us-0.15.zip"
-VOSK_MODEL_DIR="vosk-model-small-en-us-0.15"
 CURRENT_USER="$(whoami)"
 
 echo "============================================================"
@@ -40,7 +37,8 @@ echo ""
 echo "📦 [1/5] Installing system dependencies..."
 sudo apt-get update -qq
 sudo apt-get install -y python3 python3-venv python3-pip \
-    python3-pyaudio portaudio19-dev espeak flac wget unzip
+    python3-pyaudio portaudio19-dev espeak flac ffmpeg wget unzip \
+    libsdl2-mixer-2.0-0 libsdl2-image-2.0-0 libsdl2-2.0-0
 echo "✅ System dependencies installed."
 echo ""
 
@@ -59,26 +57,14 @@ echo ""
 
 # ── Step 3: Python packages ──────────────────────────────────────────
 echo "📚 [3/5] Installing Python packages..."
-pip install pyttsx3 SpeechRecognition PyAudio vosk --quiet
+pip install edge-tts pygame pyttsx3 openai-whisper SpeechRecognition PyAudio --quiet
 echo "✅ Python packages installed."
 echo ""
 
-# ── Step 4: Vosk offline model ───────────────────────────────────────
-echo "🎤 [4/5] Setting up Vosk offline speech model..."
-cd "${INSTALL_DIR}"
-if [ -d "${VOSK_MODEL_DIR}" ]; then
-    echo "   Vosk model already exists at ${VOSK_MODEL_DIR}"
-else
-    if [ ! -f "${VOSK_MODEL_ZIP}" ]; then
-        echo "   Downloading Vosk model (~40 MB)..."
-        wget -q --show-progress "${VOSK_MODEL_URL}" -O "${VOSK_MODEL_ZIP}"
-    fi
-    echo "   Extracting model..."
-    unzip -q -o "${VOSK_MODEL_ZIP}"
-    rm -f "${VOSK_MODEL_ZIP}"
-    echo "   Model extracted to ${VOSK_MODEL_DIR}"
-fi
-echo "✅ Vosk model ready."
+# ── Step 4: Pre-download Whisper model ───────────────────────────────
+echo "🎙️ [4/5] Pre-downloading Whisper 'base' model (~74 MB)..."
+"${VENV_DIR}/bin/python" -c "import whisper; whisper.load_model('base'); print('Whisper base model ready.')"
+echo "✅ Whisper model ready."
 echo ""
 
 # ── Step 5: Generate knowledge base if missing ──────────────────────

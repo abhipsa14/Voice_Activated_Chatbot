@@ -1,34 +1,34 @@
 """
 Speech-to-Text module for UIT Chatbot (Raspberry Pi compatible)
 ---------------------------------------------------------------
-Supports multiple recognition backends:
-  1. Vosk   – fully OFFLINE, best for Raspberry Pi (recommended)
-  2. Google – online, no API key needed (fallback)
+Primary:  OpenAI Whisper — highly accurate, runs OFFLINE, handles accents well
+Fallback: Google Speech API (online, free tier)
 
-Microphone input via PyAudio.
+Whisper is far more accurate than Vosk / Google for Indian English accents
+and noisy environments. The 'base' model runs well on Raspberry Pi 4.
 
-Setup on Raspberry Pi:
-    sudo apt-get install python3-pyaudio portaudio19-dev espeak
-    pip install SpeechRecognition pyaudio vosk
+Setup:
+    pip install openai-whisper SpeechRecognition PyAudio
 
-    # Download a small Vosk model for offline use:
-    wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
-    unzip vosk-model-small-en-us-0.15.zip -d vosk-model-small-en-us
+    On Raspberry Pi:
+        sudo apt-get install python3-pyaudio portaudio19-dev ffmpeg
+        pip install openai-whisper SpeechRecognition PyAudio
 
 Usage:
     from stt_module import listen, STTEngine
 
-    # Quick one-liner
     text = listen()
 
-    # Or use the engine for control
-    engine = STTEngine(backend="vosk", model_path="vosk-model-small-en-us")
+    engine = STTEngine(backend="whisper", model_size="base")
     text = engine.listen()
 """
 
-import os
+import io
 import json
+import os
+import wave
 import platform
+import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -36,48 +36,65 @@ BASE_DIR = Path(__file__).resolve().parent
 # ── Check available libraries ──────────────────────────────────────────
 try:
     import speech_recognition as sr
-
     SR_AVAILABLE = True
 except ImportError:
     SR_AVAILABLE = False
 
 try:
-    from vosk import Model as VoskModel, KaldiRecognizer
+    import whisper as openai_whisper
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
 
+try:
+    from vosk import Model as VoskModel, KaldiRecognizer
     VOSK_AVAILABLE = True
 except ImportError:
     VOSK_AVAILABLE = False
 
 
 class STTEngine:
-    """Wrapper for Speech-to-Text with Vosk (offline) and Google (online) backends."""
+    """Speech-to-Text with Whisper (offline, accurate) and Google (online) backends."""
 
-    BACKENDS = ("vosk", "google")
+    BACKENDS = ("whisper", "google", "vosk")
+
+    # Whisper model sizes — pick based on your hardware:
+    #   tiny   (~39 MB)  — fastest, decent accuracy
+    #   base   (~74 MB)  — good balance for Pi 4
+    #   small  (~244 MB) — better accuracy, slower on Pi
+    WHISPER_MODELS = ("tiny", "base", "small", "medium")
 
     def __init__(
         self,
         backend: str = "auto",
+        model_size: str = "base",
         model_path: str | None = None,
         energy_threshold: int = 300,
-        pause_threshold: float = 1.0,
-        timeout: float = 5.0,
-        phrase_time_limit: float = 10.0,
+        pause_threshold: float = 1.5,
+        timeout: float = 7.0,
+        phrase_time_limit: float = 15.0,
+        language: str = "en",
     ):
         """
         Args:
-            backend:            "vosk", "google", or "auto" (tries vosk first).
-            model_path:         Path to Vosk model directory (for offline mode).
-            energy_threshold:   Minimum audio energy to consider for recording.
-            pause_threshold:    Seconds of silence before a phrase is considered complete.
+            backend:            "whisper", "google", "vosk", or "auto".
+            model_size:         Whisper model size ("tiny", "base", "small").
+            model_path:         Path to Vosk model directory (if using vosk).
+            energy_threshold:   Min audio energy to trigger recording.
+            pause_threshold:    Seconds of silence to end a phrase.
             timeout:            Max seconds to wait for speech to start.
             phrase_time_limit:  Max seconds for a single phrase.
+            language:           Language code for Whisper (default "en").
         """
         self.timeout = timeout
         self.phrase_time_limit = phrase_time_limit
+        self.language = language
+        self.whisper_model = None
+        self.vosk_model = None
 
         if not SR_AVAILABLE:
             print("⚠️  SpeechRecognition not installed.")
-            print("   Install: pip install SpeechRecognition")
+            print("   Install: pip install SpeechRecognition PyAudio")
             self.recognizer = None
             self.backend = None
             return
@@ -89,44 +106,53 @@ class STTEngine:
 
         # Resolve backend
         if backend == "auto":
-            if VOSK_AVAILABLE and self._find_vosk_model(model_path):
+            if WHISPER_AVAILABLE:
+                self.backend = "whisper"
+            elif VOSK_AVAILABLE and self._find_vosk_model(model_path):
                 self.backend = "vosk"
             else:
                 self.backend = "google"
-                if not VOSK_AVAILABLE:
-                    print("ℹ️  Vosk not installed, using Google (online) STT.")
         else:
             self.backend = backend
 
-        # Load Vosk model if needed
-        self.vosk_model = None
-        if self.backend == "vosk":
-            vosk_path = self._find_vosk_model(model_path)
-            if vosk_path:
-                print(f"🎤 Loading Vosk model from: {vosk_path}")
-                self.vosk_model = VoskModel(str(vosk_path))
+        # Load model for chosen backend
+        if self.backend == "whisper":
+            if WHISPER_AVAILABLE:
+                print(f"🎤 Loading Whisper model '{model_size}'...")
+                try:
+                    self.whisper_model = openai_whisper.load_model(model_size)
+                    print(f"🎤 STT: Whisper ({model_size}) — offline, high accuracy")
+                except Exception as e:
+                    print(f"⚠️  Whisper load failed: {e}")
+                    self.backend = "google"
             else:
-                print("⚠️  Vosk model not found, falling back to Google STT.")
+                print("⚠️  Whisper not installed. Install: pip install openai-whisper")
                 self.backend = "google"
 
-        print(f"🎤 STT backend: {self.backend}")
+        if self.backend == "vosk":
+            vosk_path = self._find_vosk_model(model_path)
+            if vosk_path and VOSK_AVAILABLE:
+                self.vosk_model = VoskModel(str(vosk_path))
+                print(f"🎤 STT: Vosk (offline) from {vosk_path}")
+            else:
+                print("⚠️  Vosk model not found, using Google STT.")
+                self.backend = "google"
+
+        if self.backend == "google":
+            print("🎤 STT: Google (online)")
 
     def _find_vosk_model(self, model_path: str | None = None) -> Path | None:
-        """Search for a Vosk model directory."""
         candidates = []
         if model_path:
             candidates.append(Path(model_path))
-        # Search in project directory for any vosk-model-* folder
         candidates.extend(sorted(BASE_DIR.glob("vosk-model*")))
         candidates.extend(sorted(Path.home().glob("vosk-model*")))
-
         for path in candidates:
-            if path.is_dir() and (path / "conf" / "model.conf").exists():
-                return path
-            # Some models have mfcc.conf directly
-            if path.is_dir() and any(path.glob("*.conf")):
-                return path
-            if path.is_dir() and (path / "am" ).is_dir():
+            if path.is_dir() and (
+                (path / "conf" / "model.conf").exists()
+                or any(path.glob("*.conf"))
+                or (path / "am").is_dir()
+            ):
                 return path
         return None
 
@@ -135,12 +161,7 @@ class STTEngine:
         return self.recognizer is not None and self.backend is not None
 
     def listen(self, prompt: str = "🎤 Listening...") -> str | None:
-        """
-        Listen to microphone and return recognised text, or None on failure.
-
-        Returns:
-            Recognised text string, or None if nothing was understood.
-        """
+        """Listen via microphone and return recognised text, or None."""
         if not self.available:
             print("❌ STT not available.")
             return None
@@ -148,7 +169,6 @@ class STTEngine:
         try:
             with sr.Microphone() as source:
                 print(prompt)
-                # Adjust for ambient noise briefly
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio = self.recognizer.listen(
                     source,
@@ -167,7 +187,7 @@ class STTEngine:
         return self._recognise(audio)
 
     def listen_from_file(self, audio_path: str) -> str | None:
-        """Recognise speech from a WAV/FLAC/AIFF file (useful for testing)."""
+        """Recognise speech from a WAV/FLAC/AIFF file."""
         if not self.available:
             return None
         try:
@@ -179,9 +199,11 @@ class STTEngine:
             return None
 
     def _recognise(self, audio) -> str | None:
-        """Run recognition on an audio segment."""
+        """Run recognition on captured audio."""
         try:
-            if self.backend == "vosk" and self.vosk_model:
+            if self.backend == "whisper" and self.whisper_model:
+                return self._recognise_whisper(audio)
+            elif self.backend == "vosk" and self.vosk_model:
                 return self._recognise_vosk(audio)
             else:
                 return self._recognise_google(audio)
@@ -195,6 +217,32 @@ class STTEngine:
             print(f"❌ Recognition error: {e}")
             return None
 
+    def _recognise_whisper(self, audio) -> str | None:
+        """Offline recognition using OpenAI Whisper."""
+        # Save audio to a temp WAV file for Whisper
+        tmp_path = os.path.join(tempfile.gettempdir(), "stt_whisper_input.wav")
+        raw_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
+        with wave.open(tmp_path, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(raw_data)
+
+        result = self.whisper_model.transcribe(
+            tmp_path,
+            language=self.language,
+            fp16=False,  # Pi doesn't have GPU, use fp32
+        )
+        text = result.get("text", "").strip()
+
+        # Clean up
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+        return text if text else None
+
     def _recognise_vosk(self, audio) -> str | None:
         """Offline recognition using Vosk."""
         raw_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
@@ -205,12 +253,12 @@ class STTEngine:
         return text if text else None
 
     def _recognise_google(self, audio) -> str | None:
-        """Online recognition using Google Speech API (free tier)."""
+        """Online recognition using Google Speech API."""
         text = self.recognizer.recognize_google(audio)
         return text.strip() if text else None
 
 
-# ── Module-level singleton for convenience ─────────────────────────────
+# ── Module-level convenience ───────────────────────────────────────────
 _default_engine: STTEngine | None = None
 
 
@@ -222,28 +270,28 @@ def _get_engine() -> STTEngine:
 
 
 def listen(prompt: str = "🎤 Listening...") -> str | None:
-    """Convenience function: listen and return text using default engine."""
+    """Listen and return text using default engine."""
     return _get_engine().listen(prompt)
 
 
 def is_available() -> bool:
-    """Check if STT is available on this system."""
     return _get_engine().available
 
 
 if __name__ == "__main__":
-    print("Testing Speech-to-Text module...")
-    print("Speak something into your microphone:\n")
+    print("=== STT Module Test ===")
+    print(f"  Whisper : {WHISPER_AVAILABLE}")
+    print(f"  Vosk    : {VOSK_AVAILABLE}")
+    print(f"  SpeechRecognition : {SR_AVAILABLE}")
+    print()
 
-    if not SR_AVAILABLE:
-        print("❌ Install SpeechRecognition: pip install SpeechRecognition")
-    else:
-        engine = STTEngine()
-        if engine.available:
-            text = engine.listen()
-            if text:
-                print(f"\n✅ You said: \"{text}\"")
-            else:
-                print("\n⚠️  No speech detected or could not understand.")
+    engine = STTEngine()
+    if engine.available:
+        print("Speak something into your microphone:\n")
+        text = engine.listen()
+        if text:
+            print(f'\n✅ You said: "{text}"')
         else:
-            print("❌ STT engine not available. Check dependencies.")
+            print("\n⚠️  No speech detected or could not understand.")
+    else:
+        print("❌ STT not available. Install: pip install openai-whisper SpeechRecognition PyAudio")
