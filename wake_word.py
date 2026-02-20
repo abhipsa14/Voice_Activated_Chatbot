@@ -31,17 +31,32 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
+# ── ARM / Raspberry Pi detection ───────────────────────────────────────
+_MACHINE = platform.machine().lower()
+IS_ARM = _MACHINE.startswith("arm") or _MACHINE.startswith("aarch")
+
 try:
     import pyaudio
     PYAUDIO_AVAILABLE = True
 except ImportError:
     PYAUDIO_AVAILABLE = False
 
+# Whisper / PyTorch causes "Illegal instruction" on Raspberry Pi ARM.
+# Skip import on ARM — we'll use SpeechRecognition (Google) instead.
+WHISPER_AVAILABLE = False
+if not IS_ARM:
+    try:
+        import whisper as openai_whisper
+        WHISPER_AVAILABLE = True
+    except ImportError:
+        pass
+
+# SpeechRecognition as fallback transcription engine on ARM
 try:
-    import whisper as openai_whisper
-    WHISPER_AVAILABLE = True
+    import speech_recognition as sr
+    SR_AVAILABLE = True
 except ImportError:
-    WHISPER_AVAILABLE = False
+    SR_AVAILABLE = False
 
 
 class WakeWordDetector:
@@ -82,23 +97,36 @@ class WakeWordDetector:
         self.sensitivity = sensitivity
         self.whisper_model = None
         self._audio = None
+        self._use_google = False  # True when falling back to Google STT on ARM
 
         if not PYAUDIO_AVAILABLE:
             print("⚠️  PyAudio not installed. Wake word detection unavailable.")
             print("   Install: pip install PyAudio")
             return
 
-        if not WHISPER_AVAILABLE:
-            print("⚠️  Whisper not installed. Wake word detection unavailable.")
-            print("   Install: pip install openai-whisper")
-            return
-
-        # Load tiny Whisper model (fast enough for wake word, ~39 MB)
-        print(f"🔔 Loading Whisper '{model_size}' for wake word detection...")
-        try:
-            self.whisper_model = openai_whisper.load_model(model_size)
-        except Exception as e:
-            print(f"⚠️  Failed to load Whisper model: {e}")
+        if WHISPER_AVAILABLE:
+            # Desktop / non-ARM: use Whisper for fast offline wake word
+            print(f"🔔 Loading Whisper '{model_size}' for wake word detection...")
+            try:
+                self.whisper_model = openai_whisper.load_model(model_size)
+            except Exception as e:
+                print(f"⚠️  Failed to load Whisper model: {e}")
+                # Try Google fallback
+                if SR_AVAILABLE:
+                    print("ℹ️  Using Google Speech API for wake word instead.")
+                    self._use_google = True
+                else:
+                    return
+        elif SR_AVAILABLE:
+            # ARM / Raspberry Pi: use Google STT (requires internet)
+            if IS_ARM:
+                print("ℹ️  ARM detected — using Google Speech API for wake word (Whisper skipped).")
+            else:
+                print("ℹ️  Whisper not installed — using Google Speech API for wake word.")
+            self._use_google = True
+        else:
+            print("⚠️  Neither Whisper nor SpeechRecognition available.")
+            print("   Install: pip install openai-whisper  or  pip install SpeechRecognition")
             return
 
         # Adjust threshold based on sensitivity
@@ -110,7 +138,7 @@ class WakeWordDetector:
 
     @property
     def available(self) -> bool:
-        return PYAUDIO_AVAILABLE and self.whisper_model is not None
+        return PYAUDIO_AVAILABLE and (self.whisper_model is not None or self._use_google)
 
     def _rms(self, data: bytes) -> float:
         """Calculate root-mean-square energy of audio chunk."""
@@ -163,7 +191,7 @@ class WakeWordDetector:
         return b"".join(frames)
 
     def _transcribe_audio(self, raw_audio: bytes) -> str:
-        """Transcribe raw audio bytes using Whisper tiny."""
+        """Transcribe raw audio bytes using Whisper or Google STT."""
         tmp_path = os.path.join(tempfile.gettempdir(), "wake_word_check.wav")
         with wave.open(tmp_path, "wb") as wf:
             wf.setnchannels(self.CHANNELS)
@@ -171,12 +199,24 @@ class WakeWordDetector:
             wf.setframerate(self.RATE)
             wf.writeframes(raw_audio)
 
+        text = ""
         try:
-            result = self.whisper_model.transcribe(
-                tmp_path, language="en", fp16=False,
-                no_speech_threshold=0.5,
-            )
-            text = result.get("text", "").lower().strip()
+            if self._use_google:
+                # Google STT via SpeechRecognition
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(tmp_path) as source:
+                    audio = recognizer.record(source)
+                try:
+                    text = recognizer.recognize_google(audio).lower().strip()
+                except (sr.UnknownValueError, sr.RequestError):
+                    text = ""
+            else:
+                # Whisper (offline)
+                result = self.whisper_model.transcribe(
+                    tmp_path, language="en", fp16=False,
+                    no_speech_threshold=0.5,
+                )
+                text = result.get("text", "").lower().strip()
         except Exception:
             text = ""
 

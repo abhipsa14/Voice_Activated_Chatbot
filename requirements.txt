@@ -11,18 +11,20 @@ pyttsx3                # Offline fallback TTS (espeak on Pi / SAPI5 on Windows)
 
 # ── Speech-to-Text (STT) — accurate recognition ───────
 openai-whisper         # OpenAI Whisper — offline, highly accurate, handles accents
-SpeechRecognition      # Mic input + recognition framework
+                       # ⚠️  DESKTOP ONLY — do NOT install on Raspberry Pi (PyTorch crashes on ARM)
+SpeechRecognition      # Mic input + recognition framework (also used as STT fallback on Pi)
 PyAudio                # Microphone access (requires portaudio)
 
 # Optional STT backends:
-# vosk                 # Lighter offline alternative to Whisper
+# vosk                 # Lighter offline alternative to Whisper (works on Pi too)
 
 # ──────────────────────────────────────────────
 # Raspberry Pi setup (run these on the Pi terminal):
 #
 #   sudo apt-get update
 #   sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac ffmpeg
-#   pip install edge-tts pygame pyttsx3 openai-whisper SpeechRecognition PyAudio
+#   pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio
+#   ⚠️  Do NOT install openai-whisper on Pi — it causes "Illegal instruction"
 #
 # How to run:
 #   python chatbot.py              # text-only mode

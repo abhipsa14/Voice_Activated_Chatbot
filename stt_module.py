@@ -33,6 +33,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
+# ── ARM / Raspberry Pi detection ───────────────────────────────────────
+_MACHINE = platform.machine().lower()
+IS_ARM = _MACHINE.startswith("arm") or _MACHINE.startswith("aarch")
+
 # ── Check available libraries ──────────────────────────────────────────
 try:
     import speech_recognition as sr
@@ -40,11 +44,17 @@ try:
 except ImportError:
     SR_AVAILABLE = False
 
-try:
-    import whisper as openai_whisper
-    WHISPER_AVAILABLE = True
-except ImportError:
-    WHISPER_AVAILABLE = False
+# Whisper / PyTorch causes "Illegal instruction" on Raspberry Pi ARM.
+# Skip the import entirely on ARM to prevent a hard crash.
+WHISPER_AVAILABLE = False
+if not IS_ARM:
+    try:
+        import whisper as openai_whisper
+        WHISPER_AVAILABLE = True
+    except ImportError:
+        pass
+else:
+    openai_whisper = None  # placeholder so references don't error
 
 try:
     from vosk import Model as VoskModel, KaldiRecognizer
@@ -106,14 +116,26 @@ class STTEngine:
 
         # Resolve backend
         if backend == "auto":
-            if WHISPER_AVAILABLE:
+            if IS_ARM and not WHISPER_AVAILABLE:
+                # On Raspberry Pi, prefer Vosk (offline) > Google (online)
+                if VOSK_AVAILABLE and self._find_vosk_model(model_path):
+                    self.backend = "vosk"
+                else:
+                    self.backend = "google"
+                print("ℹ️  ARM detected — Whisper/PyTorch skipped (incompatible).")
+            elif WHISPER_AVAILABLE:
                 self.backend = "whisper"
             elif VOSK_AVAILABLE and self._find_vosk_model(model_path):
                 self.backend = "vosk"
             else:
                 self.backend = "google"
         else:
-            self.backend = backend
+            if backend == "whisper" and IS_ARM and not WHISPER_AVAILABLE:
+                print("⚠️  Whisper is not available on ARM/Raspberry Pi.")
+                print("   Falling back to Google STT.")
+                self.backend = "google"
+            else:
+                self.backend = backend
 
         # Load model for chosen backend
         if self.backend == "whisper":

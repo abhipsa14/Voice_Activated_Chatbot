@@ -5,9 +5,11 @@
 #  This script:
 #    1. Installs system dependencies (espeak, portaudio, ffmpeg, flac)
 #    2. Creates a Python virtual environment
-#    3. Installs Python packages (edge-tts, whisper, pygame, etc.)
-#    4. Downloads the Whisper speech model (~74 MB, first run)
-#    5. Installs & enables the systemd service
+#    3. Installs Python packages (edge-tts, pygame, SpeechRecognition, etc.)
+#    4. Installs & enables the systemd service
+#
+#  NOTE: Whisper / PyTorch is NOT installed on ARM (causes "Illegal instruction").
+#        STT and wake-word use Google Speech API on the Pi instead.
 #
 #  Usage:
 #    chmod +x setup_pi.sh
@@ -57,20 +59,18 @@ echo ""
 
 # ── Step 3: Python packages ──────────────────────────────────────────
 echo "📚 [3/5] Installing Python packages..."
-pip install edge-tts pygame pyttsx3 openai-whisper SpeechRecognition PyAudio --quiet
+# NOTE: openai-whisper is NOT installed — PyTorch causes "Illegal instruction" on ARM.
+# STT uses Google Speech API (online) on the Pi instead.
+pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio --quiet
 echo "✅ Python packages installed."
 echo ""
 
-# ── Step 4: Pre-download Whisper model ───────────────────────────────
-echo "🎙️ [4/5] Pre-downloading Whisper 'base' model (~74 MB)..."
-"${VENV_DIR}/bin/python" -c "import whisper; whisper.load_model('base'); print('Whisper base model ready.')"
-echo "✅ Whisper model ready."
-echo ""
-
-# ── Step 5: Generate knowledge base if missing ──────────────────────
+# ── Step 4: Generate knowledge base if missing ──────────────────────
 if [ ! -f "${INSTALL_DIR}/knowledge_base.json" ]; then
-    echo "📄 Generating knowledge_base.json from uit.txt..."
+    echo "📄 [4/5] Generating knowledge_base.json from uit.txt..."
     "${VENV_DIR}/bin/python" "${INSTALL_DIR}/parse_txt.py"
+else
+    echo "✅ [4/5] knowledge_base.json already exists."
 fi
 
 # ── Step 6: Install systemd service ─────────────────────────────────

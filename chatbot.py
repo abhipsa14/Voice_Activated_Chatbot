@@ -278,7 +278,9 @@ def run_daemon(bot, tts_engine, stt_engine, wake_phrase: str):
     )
 
     if not detector.available:
-        print("❌ Wake word detection not available. Install: pip install openai-whisper PyAudio")
+        print("❌ Wake word detection not available.")
+        print("   Install: pip install SpeechRecognition PyAudio")
+        print("   (On desktop you can also use: pip install openai-whisper)")
         return
 
     print("=" * 60)
