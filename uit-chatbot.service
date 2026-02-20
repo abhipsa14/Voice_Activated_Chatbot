@@ -1,0 +1,20 @@
+[Unit]
+Description=UIT Prayagraj Chatbot - Voice Q&A Service
+After=network.target sound.target pulseaudio.service
+Wants=pulseaudio.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/chatbot
+ExecStart=/home/pi/chatbot/.venv/bin/python /home/pi/chatbot/chatbot.py --voice
+Restart=on-failure
+RestartSec=5
+StandardInput=tty
+TTYPath=/dev/tty1
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

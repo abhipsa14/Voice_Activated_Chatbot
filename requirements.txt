@@ -1,0 +1,32 @@
+# UIT Prayagraj Chatbot – Dependencies
+#
+# Core chatbot (text only) uses Python standard library – no installs needed.
+#
+# For voice features (TTS + STT), install the packages below:
+
+# ── Text-to-Speech (TTS) ──────────────────────
+pyttsx3                # Offline TTS engine (uses espeak on Pi / SAPI5 on Windows)
+
+# ── Speech-to-Text (STT) ──────────────────────
+SpeechRecognition      # Mic input + recognition framework
+PyAudio                # Microphone access (requires portaudio)
+vosk                   # Offline speech recognition (recommended for Raspberry Pi)
+
+# ──────────────────────────────────────────────
+# Raspberry Pi setup (run these on the Pi terminal):
+#
+#   sudo apt-get update
+#   sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac
+#   pip install pyttsx3 SpeechRecognition PyAudio vosk
+#
+#   # Download small Vosk model for offline STT (~40 MB):
+#   wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+#   unzip vosk-model-small-en-us-0.15.zip
+#   mv vosk-model-small-en-us-0.15 vosk-model-small-en-us
+#
+# How to run:
+#   python chatbot.py              # text-only mode
+#   python chatbot.py --voice      # full voice mode (mic + speaker)
+#   python chatbot.py --tts        # type questions, hear answers
+#   python chatbot.py --stt        # speak questions, read answers
+
