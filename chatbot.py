@@ -2,11 +2,17 @@
 UIT Prayagraj Chatbot
 ---------------------
 An interactive Q&A chatbot that loads knowledge from a JSON file
-(generated from uit.txt) and uses TF-IDF + cosine-similarity + fuzzy
-matching to find the best answer for any user question.
+(generated from uit.txt) and uses a RAG (Retrieval-Augmented Generation)
+pipeline with hybrid retrieval (TF-IDF + semantic embeddings) to find
+the best answer for any user question.
 
-Supports a wake-word mode ("Hey UIT") for always-on hands-free operation
-on Raspberry Pi.
+Features:
+  - RAG pipeline with sentence-transformer embeddings + TF-IDF fusion
+  - Speech post-processing with domain-specific corrections
+  - Confidence-based retry for voice input
+  - Wake-word mode ("Hey UIT") for hands-free operation
+  - TTS with Edge neural voices
+  - Full caching layer (queries, TTS audio, embeddings)
 
 Usage:
     python chatbot.py              # text-only mode
@@ -22,6 +28,7 @@ import math
 import argparse
 from pathlib import Path
 from collections import Counter
+from cache_manager import CacheManager
 
 BASE_DIR = Path(__file__).resolve().parent
 JSON_FILE = BASE_DIR / "knowledge_base.json"
@@ -147,22 +154,60 @@ def cosine_sim(vec_a: dict, vec_b: dict) -> float:
         return 0.0
     return dot / (mag_a * mag_b)
 
+# ── RAG Pipeline (optional, enhanced retrieval) ────────────────────────
+try:
+    from rag_pipeline import RAGPipeline  # type: ignore[import-not-found]
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
+
 
 # ── Chatbot class ──────────────────────────────────────────────────────
 class UITChatbot:
     SIMILARITY_THRESHOLD = 0.08  # Lower threshold for more general matching
 
-    def __init__(self, json_path: Path = JSON_FILE):
+    TOP_QUERIES = [
+        "what are the college timings",
+        "fee structure",
+        "admission process",
+        "exam schedule",
+        "library hours",
+        "hostel facility",
+        "placement details",
+        "contact number",
+        "courses offered",
+        "principal name"
+    ]
+
+    def __init__(self, json_path: Path = JSON_FILE, use_rag: bool = True):
+        self.cache = CacheManager()
         self.kb = self._load_kb(json_path)
         self.doc_tokens = [
             tokenize(item["question"] + " " + item["answer"]) for item in self.kb
         ]
-        self.tfidf_vectors, self.idf = build_tfidf(self.doc_tokens)
+
+        # ── RAG pipeline (primary retrieval) ────────────────────────────
+        self.rag = None
+        if use_rag and RAG_AVAILABLE:
+            try:
+                self.rag = RAGPipeline(self.kb)
+            except Exception as e:
+                print(f"⚠️  RAG pipeline init failed: {e}")
+                print("   Falling back to TF-IDF mode.")
+                self.rag = None
+
+        # ── TF-IDF fallback ───────────────────────────────────────────
+        cached = self.cache.load_tfidf_cache()
+        if cached is not None:
+            self.idf, self.tfidf_vectors = cached
+        else:
+            self.tfidf_vectors, self.idf = build_tfidf(self.doc_tokens)
+            self.cache.save_tfidf_cache(self.idf, self.tfidf_vectors)
 
     @staticmethod
     def _load_kb(path: Path) -> list[dict]:
         if not path.exists():
-            from parse_txt import parse_txt_to_json
+            from parse_txt import parse_txt_to_json  # type: ignore[import-not-found]
             kb = parse_txt_to_json(TXT_FILE)
             path.write_text(json.dumps(kb, indent=2, ensure_ascii=False), encoding="utf-8")
             return kb
@@ -191,9 +236,34 @@ class UITChatbot:
 
         return total / len(query_tokens)
 
+    def warm_cache(self, top_queries=None):
+        if top_queries is None:
+            top_queries = self.TOP_QUERIES
+        for q in top_queries:
+            self.get_answer(q)
+
     def get_answer(self, user_input: str) -> str:
         if not user_input.strip():
-            return "Please ask a question about UIT Prayagraj."
+            return "Please ask a question about United Institute of Technology Prayagraj."
+
+        cached_ans = self.cache.get_response(user_input)
+        if cached_ans:
+            print(f"[QUERY CACHE HIT]  → {user_input}")
+            return cached_ans
+
+        # ── Try RAG pipeline first ─────────────────────────────────────
+        if self.rag is not None:
+            print(f"[RAG QUERY]        → {user_input}")
+            answer, confidence = self.rag.query(user_input)
+            print(f"   [RAG confidence: {confidence:.4f}]")
+            if confidence >= 0.004:  # RAG found something meaningful
+                self.cache.set_response(user_input, answer)
+                return answer
+            # RAG didn't find a good match — fall through to TF-IDF
+            print("   [RAG confidence too low, trying TF-IDF fallback]")
+
+        # ── TF-IDF fallback ───────────────────────────────────────────
+        print(f"[TF-IDF QUERY]     → {user_input}")
 
         query_tokens = tokenize(user_input)
         expanded_tokens = expand_with_synonyms(query_tokens)
@@ -229,6 +299,7 @@ class UITChatbot:
             if second_combined > self.SIMILARITY_THRESHOLD and (best_combined - second_combined) < 0.08:
                 response += f"\n\nℹ️  Related: {self.kb[second_idx]['answer']}"
 
+        self.cache.set_response(user_input, response)
         return response
 
     def list_categories(self) -> list[str]:
@@ -257,6 +328,14 @@ def parse_args():
     parser.add_argument(
         "--wake-word", type=str, default="hey uit",
         help="Custom wake word/phrase (default: 'hey uit')",
+    )
+    parser.add_argument(
+        "--mic", type=int, default=None,
+        help="Microphone device index to use (run --list-mics to see available)",
+    )
+    parser.add_argument(
+        "--list-mics", action="store_true",
+        help="List all available microphones and exit",
     )
     return parser.parse_args()
 
@@ -312,10 +391,17 @@ def run_daemon(bot, tts_engine, stt_engine, wake_phrase: str):
             else:
                 print("Bot: Yes? How can I help you?")
 
-            # Step 3: Listen for the question
+            # Step 3: Listen for the question (with retry for reliability)
             question = None
             if stt_engine:
-                question = stt_engine.listen("🎤 Listening for your question...")
+                if hasattr(stt_engine, 'listen_with_retry'):
+                    question = stt_engine.listen_with_retry(
+                        "🎤 Listening for your question...",
+                        min_confidence=0.5,
+                        max_retries=2,
+                    )
+                else:
+                    question = stt_engine.listen("🎤 Listening for your question...")
                 if question:
                     print(f"You: {question}")
 
@@ -352,6 +438,21 @@ def run_daemon(bot, tts_engine, stt_engine, wake_phrase: str):
 def main():
     args = parse_args()
 
+    # List microphones and exit
+    if args.list_mics:
+        try:
+            import speech_recognition as sr
+            mic_names = sr.Microphone.list_microphone_names()
+            print(f"\n\U0001f3a4 Found {len(mic_names)} audio device(s):\n")
+            for i, name in enumerate(mic_names):
+                print(f"  [{i}] {name}")
+            print(f"\n\U0001f4a1 Usage: python chatbot.py --voice --mic <index>")
+        except ImportError:
+            print("\u274c SpeechRecognition not installed.")
+        except Exception as e:
+            print(f"\u274c Error: {e}")
+        return
+
     # Daemon mode implies full voice
     if args.daemon:
         args.voice = True
@@ -376,7 +477,7 @@ def main():
     if use_stt:
         try:
             from stt_module import STTEngine
-            stt_engine = STTEngine()
+            stt_engine = STTEngine(mic_index=args.mic)
             if not stt_engine.available:
                 print("⚠️  STT unavailable — falling back to text input.")
                 stt_engine = None
@@ -384,7 +485,20 @@ def main():
             print("⚠️  stt_module not found — falling back to text input.")
 
     # ── Load chatbot ───────────────────────────────────────────────────
-    bot = UITChatbot()
+    print("🔄 Loading chatbot with RAG pipeline...")
+    bot = UITChatbot(use_rag=True)
+
+    retrieval_mode = "RAG (Semantic + TF-IDF)" if bot.rag else "TF-IDF only"
+    print(f"📊 Retrieval mode: {retrieval_mode}")
+
+    print("🔊 Pre-generating TTS audio for common responses...")
+    responses_to_pregen = [bot.get_answer(q) for q in bot.TOP_QUERIES]
+    bot.cache.pregenerate(responses_to_pregen)
+
+    print("🧠 Warming query cache...")
+    bot.warm_cache()
+    
+    print("✅ Cache ready. Bot is live.")
 
     # ── Daemon mode ────────────────────────────────────────────────────
     if args.daemon:
@@ -420,7 +534,14 @@ def main():
         # ── Get user input (mic or keyboard) ───────────────────────────
         user_input = None
         if stt_engine:
-            user_input = stt_engine.listen("🎤 Listening... (say 'type' for keyboard)")
+            # Use retry-based listening for better accuracy
+            if hasattr(stt_engine, 'listen_with_retry'):
+                user_input = stt_engine.listen_with_retry(
+                    "🎤 Listening... (say 'type' for keyboard)",
+                    min_confidence=0.4,
+                )
+            else:
+                user_input = stt_engine.listen("🎤 Listening... (say 'type' for keyboard)")
             if user_input:
                 print(f"You (voice): {user_input}")
             else:

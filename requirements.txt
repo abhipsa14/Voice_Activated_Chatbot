@@ -32,3 +32,11 @@ PyAudio                # Microphone access (requires portaudio)
 #   python chatbot.py --tts        # type questions, hear answers
 #   python chatbot.py --stt        # speak questions, read answers
 
+cachetools
+joblib
+
+# ── RAG Pipeline (optional — enables semantic retrieval) ───
+# sentence-transformers  # Semantic embeddings for RAG pipeline (all-MiniLM-L6-v2)
+                         # Uncomment for better question understanding
+                         # ~120 MB download on first run
+                         # pip install sentence-transformers

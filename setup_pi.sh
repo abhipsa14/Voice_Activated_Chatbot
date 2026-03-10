@@ -61,7 +61,7 @@ echo ""
 echo "📚 [3/5] Installing Python packages..."
 # NOTE: openai-whisper is NOT installed — PyTorch causes "Illegal instruction" on ARM.
 # STT uses Google Speech API (online) on the Pi instead.
-pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio --quiet
+pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio cachetools joblib --quiet
 echo "✅ Python packages installed."
 echo ""
 
@@ -73,8 +73,15 @@ else
     echo "✅ [4/5] knowledge_base.json already exists."
 fi
 
+# ── Step 5: Initialize Caches ───────────────────────────────────────
+echo "🧠 [5/6] Setting up and pre-warming caches..."
+mkdir -p "${INSTALL_DIR}/.tts_cache" "${INSTALL_DIR}/.cache"
+"${VENV_DIR}/bin/python" -c "from chatbot import UITChatbot; b = UITChatbot(); b.warm_cache(b.TOP_QUERIES)"
+echo "✅ Caches initialized."
+echo ""
+
 # ── Step 6: Install systemd service ─────────────────────────────────
-echo "⚙️  [5/5] Installing systemd service..."
+echo "⚙️  [6/6] Installing systemd service..."
 
 # Add user to audio group for mic/speaker access
 sudo usermod -aG audio "${CURRENT_USER}" 2>/dev/null || true

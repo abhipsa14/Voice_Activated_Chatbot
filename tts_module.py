@@ -23,6 +23,12 @@ import platform
 import time
 from pathlib import Path
 
+if platform.system() == 'Windows':
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except AttributeError:
+        pass
+
 BASE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = BASE_DIR / ".tts_cache"
 
@@ -60,7 +66,7 @@ VOICE_PRESETS = {
     "uk_male": "en-GB-RyanNeural",
 }
 
-DEFAULT_VOICE = "en-IN-NeerjaNeural"
+DEFAULT_VOICE = "en-IN-PrabhatNeural"
 
 
 def _clean_text(text: str) -> str:
@@ -135,17 +141,39 @@ class TTSEngine:
     def _init_pyttsx3(self):
         """Initialize pyttsx3 as offline fallback."""
         try:
-            self._fallback_engine = pyttsx3.init()
-            self._fallback_engine.setProperty("rate", self._fallback_rate)
-            self._fallback_engine.setProperty("volume", 1.0)
-            voices = self._fallback_engine.getProperty("voices")
-            for v in voices:
-                if "zira" in v.name.lower() or "female" in v.name.lower():
-                    self._fallback_engine.setProperty("voice", v.id)
-                    break
+            engine = pyttsx3.init()
         except Exception as e:
-            print(f"⚠️  pyttsx3 init error: {e}")
+            print(f"⚠️  pyttsx3.init() raised an error: {e}")
             self._fallback_engine = None
+            return
+
+        if engine is None:
+            print("⚠️  pyttsx3.init() returned None (speech engine unavailable)")
+            self._fallback_engine = None
+            return
+
+        # Verify the engine actually works by testing setProperty immediately.
+        # pyttsx3 can return a non-None object whose internal proxy is broken,
+        # which causes 'NoneType has no attribute setProperty' deeper in the call.
+        try:
+            engine.setProperty("rate", self._fallback_rate)
+            engine.setProperty("volume", 1.0)
+        except (AttributeError, Exception) as e:
+            print(f"⚠️  pyttsx3 engine is broken (setProperty failed): {e}")
+            self._fallback_engine = None
+            return
+
+        try:
+            voices = engine.getProperty("voices")
+            if voices:
+                for v in voices:
+                    if "zira" in v.name.lower() or "female" in v.name.lower():
+                        engine.setProperty("voice", v.id)
+                        break
+        except Exception as e:
+            print(f"⚠️  pyttsx3 voice selection error (non-fatal): {e}")
+
+        self._fallback_engine = engine
 
     @property
     def available(self) -> bool:
@@ -159,9 +187,19 @@ class TTSEngine:
         if not clean:
             return
 
+        from cache_manager import CacheManager
+        cache = CacheManager()
+        
         if self.use_edge:
+            cached_audio = cache.get_audio_path(text)
+            if cached_audio:
+                print(f"[TTS CACHE HIT]    → playing cached audio")
+                self._play_audio(cached_audio)
+                return
+
+            print(f"[TTS CACHE MISS]   → generating via Edge TTS")
             try:
-                self._speak_edge(clean)
+                self._speak_edge(clean, original_text=text, cache=cache)
                 return
             except Exception as e:
                 print(f"⚠️  Edge TTS error ({e}), using fallback...")
@@ -173,9 +211,13 @@ class TTSEngine:
         else:
             print(f"[TTS disabled] {clean}")
 
-    def _speak_edge(self, text: str) -> None:
+    def _speak_edge(self, text: str, original_text: str = None, cache=None) -> None:
         """Generate and play speech using Edge TTS neural voices."""
-        audio_file = CACHE_DIR / "tts_output.mp3"
+        if cache and original_text:
+            md5 = cache._get_md5(original_text)
+            audio_file = CACHE_DIR / f"{md5}.mp3"
+        else:
+            audio_file = CACHE_DIR / "tts_output.mp3"
 
         async def _generate():
             communicate = edge_tts.Communicate(
@@ -188,7 +230,15 @@ class TTSEngine:
             await communicate.save(str(audio_file))
 
         loop = _get_or_create_event_loop()
-        loop.run_until_complete(_generate())
+        try:
+            loop.run_until_complete(_generate())
+        except KeyboardInterrupt:
+            print("\n⏹️  Speech generation interrupted by user.")
+            return
+
+        if cache and original_text:
+            cache.set_audio_path(original_text, str(audio_file))
+
         self._play_audio(str(audio_file))
 
     def _play_audio(self, filepath: str) -> None:
@@ -199,6 +249,10 @@ class TTSEngine:
                 pygame.mixer.music.play()
                 while pygame.mixer.music.get_busy():
                     pygame.time.wait(50)
+                return
+            except KeyboardInterrupt:
+                print("\n⏹️  Audio playback interrupted by user.")
+                pygame.mixer.music.stop()
                 return
             except Exception:
                 pass

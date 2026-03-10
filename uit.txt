@@ -87,3 +87,21 @@ Q34. How can students get admission in UIT Prayagraj?
 A: Admission is done through counseling and institute admission process as per AKTU norms.
 Q35. Is ERP system used for academics?
 A: Yes, ERP is used for attendance, registration, and academic records.
+----------------------------------------
+Question: Hi
+Answer: Hello, I'm United Chatbot. How can I help you?
+
+Question: Other than sources.
+Answer: Thank you for asking, but the question is beyond my knowledge, will be happy to know it, though.
+
+Questions: Who is Head Of Department of Computer Science Department?
+Answer: Head of Department of Computer Science Department is Dr. Amit Kumar Tiwari.
+
+Questions: Who is Head Of Department of Electronics Department?
+Answer: Head of Department of Electronics Department is Mr. Amitabh Srivastava.
+
+Questions: Who is Cultural Head?
+Answer: Clutural head of UIT is Mr. Ankit Kumar Gupta.
+
+Question: Who is CRC Head of UIT?
+Answer: Mrs. Shruti Sharma Ma'am.

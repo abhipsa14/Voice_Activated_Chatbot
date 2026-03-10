@@ -168,5 +168,35 @@
     "category": "Admission & Support Services",
     "question": "Is ERP system used for academics?",
     "answer": "Yes, ERP is used for attendance, registration, and academic records."
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Hi",
+    "answer": "Hello, I'm United Chatbot. How can I help you?"
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Other than sources.",
+    "answer": "Thank you for asking, but the question is beyond my knowledge, will be happy to know it, though."
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Who is HOD of Computer Science Department?",
+    "answer": "Head of Department of Computer Science Department is Dr. Amit Kumar Tiwari."
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Who is HOD of Electronics Department?",
+    "answer": "Head of Department of Electronics Department is Mr. Amitabh Srivastava."
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Who is Cultural Head?",
+    "answer": "Clutural head of UIT is Mr. Ankit Kumar Gupta."
+  },
+  {
+    "category": "Admission & Support Services",
+    "question": "Who is CRC Head of UIT?",
+    "answer": "Mrs. Shruti Sharma Ma'am."
   }
 ]
