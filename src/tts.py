@@ -17,8 +17,12 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import wave
 from pathlib import Path
+
+# Ensure project root is on sys.path so config.config resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import (
     PIPER_MODEL, PIPER_BIN,

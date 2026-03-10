@@ -27,7 +27,7 @@ KB_TXT_FILE = BASE_DIR / "uit.txt"
 KB_JSON_FILE = BASE_DIR / "knowledge_base.json"
 
 # ── Wake word ──────────────────────────────────────────────────────────
-WAKE_WORD = os.environ.get("WAKE_WORD", "ok uit")
+WAKE_WORD = os.environ.get("WAKE_WORD", "hey uit")
 WAKE_WORD_ALTERNATIVES = [
     "okay uit", "ok u i t", "okay u i t",
     "okay united", "ok united", "hey uit", "hey u i t",

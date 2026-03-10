@@ -10,7 +10,7 @@
 # ═══════════════════════════════════════════════════════════════
 
 # ── Voice Activity Detection ──────────────────────────────────
-PyAudio                 # Microphone access (needs portaudio)
+pyaudio               # Microphone access (needs portaudio)
 webrtcvad               # Google WebRTC Voice Activity Detection
 
 # ── Speech-to-Text ────────────────────────────────────────────
@@ -32,4 +32,4 @@ pygame                  # Audio playback for Edge TTS / cached audio
 pyttsx3                 # Offline fallback TTS (espeak / SAPI5)
 
 # ── RAG Pipeline (optional) ──────────────────────────────────
-# sentence-transformers # Semantic embeddings (uncomment for better RAG)
+sentence-transformers # Semantic embeddings (uncomment for better RAG)

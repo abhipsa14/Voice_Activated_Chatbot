@@ -19,7 +19,9 @@ Conversation history is maintained as a rolling window (last 6 turns).
 
 import json
 import math
+import os
 import re
+import sys
 import time
 from collections import Counter, deque
 from pathlib import Path
@@ -29,6 +31,9 @@ try:
     REQUESTS_OK = True
 except ImportError:
     REQUESTS_OK = False
+
+# Ensure project root is on sys.path so config.config resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import (
     OLLAMA_HOST, OLLAMA_MODEL, LLM_MAX_TOKENS,
@@ -269,13 +274,6 @@ class LLMEngine:
 
                 if best_score >= RAG_CONFIDENCE_THRESHOLD:
                     answer = f"📌 {best_entry['answer']}"
-
-                    # Add related info if second result is close
-                    if (len(results) > 1
-                            and results[1][1] >= RAG_CONFIDENCE_THRESHOLD * 0.7
-                            and results[1][0]["answer"] != best_entry["answer"]
-                            and (best_score - results[1][1]) < 0.08):
-                        answer += f"\n\nℹ️  Related: {results[1][0]['answer']}"
 
                     self.cache.put(query, answer)
                     self._add_history(query, answer)

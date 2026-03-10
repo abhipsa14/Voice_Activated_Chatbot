@@ -11,8 +11,12 @@ import os
 import re
 import subprocess
 import shutil
+import sys
 import tempfile
 from pathlib import Path
+
+# Ensure project root is on sys.path so config.config resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import (
     WHISPER_CPP_BIN, WHISPER_MODEL, WHISPER_LANGUAGE,
@@ -166,6 +170,11 @@ class STTEngine:
             )
             text = result.get("text", "").strip()
             return text if text else None
+        except FileNotFoundError:
+            print("❌ Whisper: ffmpeg not found! openai-whisper needs ffmpeg.")
+            print("   Install via:  winget install Gyan.FFmpeg")
+            print("   Then restart your terminal so the PATH update takes effect.")
+            return None
         except Exception as e:
             print(f"❌ Whisper: {e}")
             return None

@@ -20,6 +20,7 @@ Saves captured audio to config.TEMP_WAV (16 kHz mono PCM16 WAV).
 
 import collections
 import math
+import os
 import struct
 import sys
 import time
@@ -37,6 +38,9 @@ try:
     WEBRTC_AVAILABLE = True
 except ImportError:
     WEBRTC_AVAILABLE = False
+
+# Ensure project root is on sys.path so config.config resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import (
     SAMPLE_RATE, CHANNELS, CHUNK_SIZE, CHUNK_DURATION_MS,

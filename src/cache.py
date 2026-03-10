@@ -13,6 +13,7 @@ Also handles TTS audio caching:  text → pre-generated WAV path.
 import hashlib
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -27,6 +28,9 @@ try:
     REDIS_LIB_OK = True
 except ImportError:
     REDIS_LIB_OK = False
+
+# Ensure project root is on sys.path so config.config resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import (
     CACHE_DIR, TTS_CACHE_DIR,

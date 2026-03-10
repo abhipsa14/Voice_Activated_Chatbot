@@ -1,0 +1,10 @@
+{
+  "root": ".",
+  "include": ["src", "config", "."],
+  "extraPaths": ["."],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+  "venvPath": ".",
+  "venv": "venv",
+  "reportMissingImports": "warning"
+}
