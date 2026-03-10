@@ -34,7 +34,7 @@ WAKE_WORD_ALTERNATIVES = [
 ]
 
 # ── Voice Activity Detection (VAD) ────────────────────────────────────
-SILENCE_THRESHOLD = int(os.environ.get("SILENCE_THRESHOLD", "450"))
+SILENCE_THRESHOLD = int(os.environ.get("SILENCE_THRESHOLD", "350"))
 SILENCE_DURATION = float(os.environ.get("SILENCE_DURATION", "1.2"))  # s
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -43,7 +43,7 @@ CHUNK_SIZE = SAMPLE_RATE * CHUNK_DURATION_MS // 1000  # 480 samples
 VAD_AGGRESSIVENESS = 2          # 0-3  (higher = more aggressive)
 PRE_SPEECH_BUFFER_MS = 300      # ms of audio kept BEFORE speech onset
 MAX_RECORDING_SECONDS = 15      # safety cap
-WAKE_WORD_MAX_SECONDS = 3       # short clip for wake-word check
+WAKE_WORD_MAX_SECONDS = 2      # short clip for wake-word check
 
 # ── Speech-to-Text (whisper.cpp) ──────────────────────────────────────
 WHISPER_CPP_BIN = os.environ.get(

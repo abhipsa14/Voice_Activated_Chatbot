@@ -6,5 +6,11 @@
   "pythonPlatform": "All",
   "venvPath": ".",
   "venv": "venv",
-  "reportMissingImports": "warning"
+  "reportMissingImports": "warning",
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "extraPaths": ["..", "."]
+    }
+  ]
 }
