@@ -1,6 +1,3 @@
-________________________________________
-United Institute of Technology Prayagraj – AI Chatbot Training Q&A Set
-________________________________________About the Institute
 Q1. Tell about United Institute of Technology Prayagraj?
 A: United Institute of Technology Prayagraj is a leading engineering college under United Group of Institutions offering undergraduate and postgraduate technical programs.
 Q3. Which university is UIT affiliated with?
@@ -8,17 +5,17 @@ A: UIT Prayagraj is affiliated with Dr. A.P.J. Abdul Kalam Technical University 
 Q4. Is UIT approved by AICTE?
 A: Yes, United Institute of Technology Prayagraj is approved by AICTE.
 ________________________________________
-🏢 Leadership and Key Position Holders
-Q5. Who is the Principal of United Institute of Technology Prayagraj?
+Leadership and Key Position Holders
+Q5. Who is the Principal of United Institute of Technology Prayagraj or UIT Prayagraj?
 A: The Principal of UIT Prayagraj is Prof. Sanjay Srivastava manages academic administration and institutional operations.
-Q6. Who looks after academic planning at UIT?
-A: Dr. Abishek Malviya is  Dean Academics. He supervises curriculum planning and academic quality.
+Q6. Who looks after academic planning at UIT? Who is dean academics of UIT?
+A: Dr. Abhishek Malviya is  Dean Academics. He supervises curriculum planning and academic quality.
 Q7. Who handles student placements at UIT?
 A: Ms. Shruti Sharma coordinates campus recruitment and industry interaction.
 Q8. Who monitors departmental activities?
 A: Heads of Departments (HODs) monitor academic and administrative activities of their respective branches.
 ________________________________________
-🏗 Infrastructure Facilities
+Infrastructure Facilities
 Q9. Does UIT Prayagraj have smart classrooms?
 A: Yes, UIT Prayagraj has smart classrooms with digital teaching tools.
 Q10. Is there a central library in UIT?
@@ -30,7 +27,7 @@ A: Yes, UIT Prayagraj has well-equipped seminar halls for academic events.
 Q13. Does UIT provide hostel facilities?
 A: Yes, separate hostel facilities are available for boys and girls.
 ________________________________________
-💻 Computing & Laboratory Facilities
+Computing & Laboratory Facilities
 Q14. Does UIT Prayagraj have computer labs?
 A: Yes, UIT Prayagraj has multiple high-speed computer laboratories.
 Q15. Are internet-enabled systems available for students?
@@ -40,7 +37,7 @@ A: Yes, licensed software and development tools are provided for academic use.
 Q17. Are project labs available?
 A: Yes, dedicated project labs are available for final year students.
 ________________________________________
-🎯 Placements & Career Support
+Placements & Career Support
 Q18. Does UIT Prayagraj provide placement assistance?
 A: Yes, UIT Prayagraj provides strong placement support through its Training and Placement Cell.
 Q19. Are placement training programs conducted?
@@ -50,7 +47,7 @@ A: Yes, reputed companies visit UIT campus every year for placements.
 Q21. Are internships supported by UIT?
 A: Yes, students receive guidance and support for internships.
 ________________________________________
-📊 Academic Results & Performance
+Academic Results & Performance
 Q22. How are semester results monitored at UIT?
 A: Results are monitored through internal assessment and AKTU university examination reports.
 Q23. Does UIT encourage academic excellence?
@@ -58,7 +55,7 @@ A: Yes, UIT promotes academic performance through mentoring and academic review 
 Q24. Are honors awarded to top-performing students?
 A: Yes, meritorious students receive academic recognition and awards.
 ________________________________________
-🎓 Student Facilities
+Student Facilities
 Q25. Does UIT provide sports facilities?
 A: Yes, UIT Prayagraj offers indoor and outdoor sports facilities.
 Q26. Are technical clubs active in UIT?
@@ -66,7 +63,7 @@ A: Yes, technical and cultural clubs actively conduct events and workshops.
 Q27. Is career counseling available?
 A: Yes, students receive career guidance and counseling support.
 ________________________________________
-🧪 Research & Innovation
+Research & Innovation
 Q28. Does UIT encourage student research?
 A: Yes, students are encouraged to participate in research and innovation activities.
 Q29. Are innovation cells active at UIT?
@@ -74,7 +71,7 @@ A: Yes, the Innovation Cell promotes startups and project development.
 Q30. Does UIT organize workshops and FDPs?
 A: Yes, workshops, seminars, and faculty development programs are conducted regularly.
 ________________________________________
-🏫 Campus Environment
+Campus Environment
 Q31. Is UIT campus ragging-free?
 A: Yes, UIT Prayagraj maintains a strict anti-ragging policy.
 Q32. Is discipline maintained on campus?
@@ -82,7 +79,7 @@ A: Yes, academic discipline and student conduct are strictly monitored.
 Q33. Are CCTV and security available?
 A: Yes, the campus is monitored using CCTV and security staff.
 ________________________________________
-🔔 Admission & Support Services
+Admission & Support Services
 Q34. How can students get admission in UIT Prayagraj?
 A: Admission is done through counseling and institute admission process as per AKTU norms.
 Q35. Is ERP system used for academics?
@@ -100,8 +97,8 @@ Answer: Head of Department of Computer Science Department is Dr. Amit Kumar Tiwa
 Questions: Who is Head Of Department of Electronics Department?
 Answer: Head of Department of Electronics Department is Mr. Amitabh Srivastava.
 
-Questions: Who is Cultural Head?
-Answer: Clutural head of UIT is Mr. Ankit Kumar Gupta.
+Questions: Who is Cultural Head of UIT, Prayagraj or United Institute of Technology?
+Answer: Cultural head of UIT is Mr. Ankit Kumar Gupta.
 
 Question: Who is CRC Head of UIT?
 Answer: Mrs. Shruti Sharma Ma'am.

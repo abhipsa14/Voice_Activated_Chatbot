@@ -1,42 +1,35 @@
-# UIT Prayagraj Chatbot – Dependencies
+# ═══════════════════════════════════════════════════════════════
+# UIT Prayagraj Voice Chatbot – Python Dependencies
+# ═══════════════════════════════════════════════════════════════
 #
-# Core chatbot (text only) uses Python standard library – no installs needed.
+# pip install -r requirements.txt
 #
-# For voice features (TTS + STT), install the packages below:
+# NOTE: On Raspberry Pi, DO NOT install openai-whisper
+#       (PyTorch crashes on ARM with "Illegal instruction").
+#       The chatbot uses whisper.cpp instead.
+# ═══════════════════════════════════════════════════════════════
 
-# ── Text-to-Speech (TTS) — human-like neural voices ───
-edge-tts               # Microsoft Edge neural TTS (natural voice, free, needs internet)
-pygame                 # Audio playback for edge-tts output
-pyttsx3                # Offline fallback TTS (espeak on Pi / SAPI5 on Windows)
+# ── Voice Activity Detection ──────────────────────────────────
+PyAudio                 # Microphone access (needs portaudio)
+webrtcvad               # Google WebRTC Voice Activity Detection
 
-# ── Speech-to-Text (STT) — accurate recognition ───────
-openai-whisper         # OpenAI Whisper — offline, highly accurate, handles accents
-                       # ⚠️  DESKTOP ONLY — do NOT install on Raspberry Pi (PyTorch crashes on ARM)
-SpeechRecognition      # Mic input + recognition framework (also used as STT fallback on Pi)
-PyAudio                # Microphone access (requires portaudio)
+# ── Speech-to-Text ────────────────────────────────────────────
+SpeechRecognition       # Fallback STT (Google Speech API)
+# openai-whisper        # ⚠️ DESKTOP ONLY — do NOT install on Pi
 
-# Optional STT backends:
-# vosk                 # Lighter offline alternative to Whisper (works on Pi too)
+# ── LLM ───────────────────────────────────────────────────────
+requests                # HTTP client for Ollama API
 
-# ──────────────────────────────────────────────
-# Raspberry Pi setup (run these on the Pi terminal):
-#
-#   sudo apt-get update
-#   sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac ffmpeg
-#   pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio
-#   ⚠️  Do NOT install openai-whisper on Pi — it causes "Illegal instruction"
-#
-# How to run:
-#   python chatbot.py              # text-only mode
-#   python chatbot.py --voice      # full voice mode (mic + speaker)
-#   python chatbot.py --tts        # type questions, hear answers
-#   python chatbot.py --stt        # speak questions, read answers
+# ── Caching ───────────────────────────────────────────────────
+cachetools              # In-memory TTL cache (L1)
+redis                   # Redis client for L3 cache
+joblib                  # Serialisation for TF-IDF cache
 
-cachetools
-joblib
+# ── Text-to-Speech ────────────────────────────────────────────
+# piper-tts             # Piper neural TTS (install separately on Pi)
+edge-tts                # Microsoft Edge neural TTS (fallback, needs internet)
+pygame                  # Audio playback for Edge TTS / cached audio
+pyttsx3                 # Offline fallback TTS (espeak / SAPI5)
 
-# ── RAG Pipeline (optional — enables semantic retrieval) ───
-# sentence-transformers  # Semantic embeddings for RAG pipeline (all-MiniLM-L6-v2)
-                         # Uncomment for better question understanding
-                         # ~120 MB download on first run
-                         # pip install sentence-transformers
+# ── RAG Pipeline (optional) ──────────────────────────────────
+# sentence-transformers # Semantic embeddings (uncomment for better RAG)

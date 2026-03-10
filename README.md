@@ -1,219 +1,189 @@
-# 🎓 UIT Prayagraj Chatbot
+# 🎓 UIT Prayagraj Voice Chatbot
 
-An AI-powered Q&A chatbot for **United Institute of Technology, Prayagraj**. It converts text content into a structured knowledge base and answers questions using TF-IDF + fuzzy matching. Supports voice input/output and a wake-word mode ("Hey UIT") for hands-free operation on Raspberry Pi.
+An Alexa-like, fully offline voice assistant for **United Institute of Technology, Prayagraj** — runs on a Raspberry Pi 4/5.
+**No cloud, no API keys, no internet required after setup.**
+
+```
+You speak → Whisper STT → RAG + TinyLlama LLM → Piper TTS → Pi speaks back
+```
 
 ---
 
 ## ✨ Features
 
-- **Text-to-JSON parsing** — Converts Q&A content from `uit.txt` into structured JSON
-- **Smart matching** — TF-IDF + cosine similarity + fuzzy keyword matching with synonyms
-- **Handles general questions** — No need for exact phrasing; similar/approximate questions work
-- **Human-like voice** — Microsoft Edge neural TTS voices (Indian English, US, UK)
-- **Accurate speech recognition** — OpenAI Whisper on desktop; Google Speech API on Pi
-- **Wake word detection** — Say "Hey UIT" to activate (always-on daemon mode)
-- **Raspberry Pi ready** — Auto-detects ARM, skips incompatible libraries, runs as systemd service
+- **Wake word activation** — Say **"Ok UIT"** to activate (like Alexa)
+- **Instant answers** — RAG retrieval over UIT knowledge base (~0 ms for cached answers)
+- **LLM fallback** — Ollama + TinyLlama for questions outside the knowledge base
+- **3-tier caching** — L1 memory + L2 disk + L3 Redis for sub-second latency
+- **TTS audio caching** — Repeated responses play back instantly (0 ms)
+- **Improved VAD** — WebRTC VAD with ring-buffer pre-capture (no clipped words)
+- **Adaptive noise calibration** — Auto-adjusts to ambient noise levels
+- **Hands-free operation** — Always-on daemon mode via systemd
+- **Raspberry Pi optimised** — Everything runs on Pi 4 (2 GB RAM)
 
 ---
 
-## 📁 Project Structure
+## Hardware Requirements
+
+| Component | Minimum |
+|-----------|---------|
+| Raspberry Pi | Pi 4 (2 GB RAM) or Pi 5 |
+| Microphone | USB microphone or USB audio adapter |
+| Speaker | 3.5 mm jack, USB, or HDMI |
+| Storage | 16 GB microSD (32 GB recommended) |
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/you/chatbot
+cd chatbot
+chmod +x setup.sh
+./setup.sh
+```
+
+After setup finishes:
+
+```bash
+source .venv/bin/activate
+ollama serve &        # start Ollama in background
+python -m src.main
+```
+
+Say **"Ok UIT"** to activate, then ask your question.
+
+---
+
+## How the Pipeline Works
+
+```
+┌──────────┐   WAV   ┌────────────┐  text  ┌─────────────┐  reply  ┌──────────┐
+│  Mic/VAD │ ──────► │ Whisper STT│ ─────► │ RAG + LLM   │ ──────► │ Piper TTS│
+│ (WebRTC) │         │ (whisper.  │        │ + 3-tier $  │         │ + cache  │
+└──────────┘         │    cpp)    │        └─────────────┘         └──────────┘
+                     └────────────┘
+```
+
+### 1 · Voice Activity Detection (`src/vad.py`)
+- **WebRTC VAD** (Google's algorithm) — primary, fast, accurate
+- **Ring-buffer pre-capture** — keeps 300 ms before speech onset (no clipped words)
+- **Adaptive noise calibration** — auto-adjusts threshold at startup
+- Falls back to RMS energy detection if `webrtcvad` unavailable
+
+### 2 · Speech-to-Text (`src/stt.py`)
+- Calls **whisper.cpp** C++ binary as subprocess (~5-10× faster than Python Whisper on ARM)
+- Model: `ggml-tiny.en.bin` (~75 MB, ~1-2 s on Pi 4)
+- Falls back to Python Whisper → Google Speech API
+
+### 3 · Answer Engine (`src/llm.py`)
+- **Stage 1 — RAG**: TF-IDF + fuzzy keyword retrieval over UIT knowledge base (instant)
+- **Stage 2 — LLM**: Falls back to Ollama (TinyLlama 1.1B Q4) for out-of-KB questions
+- **3-tier cache**: L1 memory (0 ms) → L2 disk (1-5 ms) → L3 Redis (1-2 ms)
+- Rolling conversation history (last 6 turns)
+
+### 4 · Text-to-Speech (`src/tts.py`)
+- **Piper** neural TTS (~100 ms on Pi 4) — primary
+- **TTS audio cache** — every response saved as WAV, replayed instantly on repeat
+- Falls back to Edge TTS → espeak
+
+---
+
+## Configuration (`config/config.py`)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `WAKE_WORD` | `"ok uit"` | Phrase to trigger the bot |
+| `SILENCE_THRESHOLD` | `450` | RMS energy to detect silence |
+| `SILENCE_DURATION` | `1.2` | Seconds of silence to stop recording |
+| `OLLAMA_MODEL` | `"tinyllama"` | Any Ollama model you've pulled |
+| `LLM_MAX_TOKENS` | `150` | Keep short for fast TTS |
+| `CACHE_ENABLED` | `True` | Toggle multi-level caching |
+| `RAG_CONFIDENCE_THRESHOLD` | `0.15` | Min score for RAG match |
+| `MAX_HISTORY_TURNS` | `6` | Conversation memory depth |
+| `PRE_SPEECH_BUFFER_MS` | `300` | Audio kept before speech onset |
+
+All settings are overridable via environment variables.
+
+---
+
+## Run Modes
+
+| Command | Description |
+|---------|-------------|
+| `python -m src.main` | Voice mode with "Ok UIT" wake word |
+| `python -m src.main --no-wake-word` | Always listening (no wake word) |
+| `python -m src.main --text` | Text-only mode (type/read) |
+| `python -m src.main --list-mics` | List available microphones |
+| `python -m src.main --mic 2` | Use specific microphone index |
+
+---
+
+## Project Structure
 
 ```
 chatbot/
-├── chatbot.py            # Main chatbot with CLI and voice modes
-├── parse_txt.py          # Converts uit.txt → knowledge_base.json
-├── knowledge_base.json   # Auto-generated structured Q&A data
-├── uit.txt               # Source Q&A text file
-├── tts_module.py         # Text-to-Speech (Edge TTS + pyttsx3 fallback)
-├── stt_module.py         # Speech-to-Text (Whisper on desktop, Google on Pi)
-├── wake_word.py          # Wake word detector ("Hey UIT")
-├── setup_pi.sh           # One-command Raspberry Pi installer
-├── uit-chatbot.service   # systemd service file for auto-start
-└── requirements.txt      # Python dependencies
+├── setup.sh                  # One-click Raspberry Pi installer
+├── requirements.txt          # Python dependencies
+├── config/
+│   ├── __init__.py
+│   └── config.py             # All settings in one place
+├── src/
+│   ├── __init__.py
+│   ├── main.py               # Main voice loop (Alexa-like)
+│   ├── vad.py                # Voice activity detection (WebRTC + ring buffer)
+│   ├── stt.py                # whisper.cpp STT wrapper
+│   ├── llm.py                # RAG + Ollama LLM + 3-tier cache
+│   ├── tts.py                # Piper TTS + audio cache
+│   └── cache.py              # Multi-level cache manager
+├── parse_txt.py              # Converts uit.txt → knowledge_base.json
+├── knowledge_base.json       # Auto-generated Q&A data
+├── uit.txt                   # Source knowledge base
+├── models/                   # Whisper + Piper models
+├── audio/                    # Temp WAV files (auto-created)
+├── .cache/                   # Disk cache (auto-created)
+├── .tts_cache/               # Cached TTS audio (auto-created)
+└── systemd/
+    └── voicebot.service      # Auto-start on boot
 ```
 
 ---
 
-## 🚀 Quick Start (Windows / Linux / Mac)
+## Performance on Raspberry Pi 4 (2 GB)
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/<your-username>/chatbot.git
-cd chatbot
-```
-
-### 2. Create a virtual environment
-
-```bash
-python -m venv .venv
-
-# Activate it:
-# Windows:
-.venv\Scripts\activate
-# Linux/Mac:
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-**Text-only mode** — no extra installs needed (uses Python standard library).
-
-**For voice features (desktop / Windows / x86 Linux):**
-
-```bash
-pip install edge-tts pygame pyttsx3 openai-whisper SpeechRecognition PyAudio
-```
-
-**For voice features (Raspberry Pi / ARM):**
-
-```bash
-sudo apt-get install -y python3-pyaudio portaudio19-dev espeak flac ffmpeg
-pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio
-```
-
-> ⚠️ **Do NOT install `openai-whisper` on Raspberry Pi** — PyTorch causes an "Illegal instruction" crash on ARM. The chatbot auto-detects ARM and uses Google Speech API instead.
-
-### 4. Run the chatbot
-
-```bash
-python chatbot.py
-```
-
-The knowledge base (`knowledge_base.json`) is auto-generated from `uit.txt` on first run.
+| Stage | Cached | Cold |
+|-------|--------|------|
+| VAD + recording | Real-time | Real-time |
+| Whisper STT (tiny.en) | — | ~1.5 s |
+| RAG retrieval (cached) | < 1 ms | ~5 ms |
+| LLM TinyLlama (cached) | < 1 ms | ~3-6 s |
+| Piper TTS (cached) | < 1 ms | ~100-300 ms |
+| **Total (cached, RAG)** | **< 1.5 s** | — |
+| **Total (cold, LLM)** | — | **~5-8 s** |
 
 ---
 
-## 🎮 Run Modes
+## Troubleshooting
 
-| Command | Description |
-|---|---|
-| `python chatbot.py` | Text-only mode (type questions, read answers) |
-| `python chatbot.py --voice` | Full voice mode (speak into mic + hear answers) |
-| `python chatbot.py --tts` | Type questions, hear answers spoken aloud |
-| `python chatbot.py --stt` | Speak questions, read answers on screen |
-| `python chatbot.py --daemon` | Always-on: waits for "Hey UIT" wake word |
-| `python chatbot.py --daemon --wake-word "hello bot"` | Custom wake word |
-
----
-
-## 🎤 Voice Commands (during chat)
-
-| Command | Action |
-|---|---|
-| `categories` | List all available Q&A topics |
-| `voices` | Show available voice presets |
-| `voice indian_male` | Switch TTS voice (e.g., indian_male, us_female, uk_male) |
-| `type` | Switch to keyboard input temporarily (in voice mode) |
-| `quit` / `exit` / `bye` | Exit the chatbot |
-
-### Available Voice Presets
-
-| Preset | Voice |
-|---|---|
-| `indian_female` | en-IN-NeerjaNeural (default) |
-| `indian_male` | en-IN-PrabhatNeural |
-| `us_female` | en-US-JennyNeural |
-| `us_male` | en-US-GuyNeural |
-| `uk_female` | en-GB-SoniaNeural |
-| `uk_male` | en-GB-RyanNeural |
+| Problem | Fix |
+|---------|-----|
+| No audio input | `arecord -l` to list devices; use `--mic <index>` |
+| Ollama not responding | Run `ollama serve` first; check `curl localhost:11434` |
+| Whisper binary not found | Run `cd whisper.cpp && make` |
+| Redis connection refused | `sudo systemctl start redis-server` |
+| Very slow responses | Use smaller model or reduce `LLM_MAX_TOKENS` |
+| Wake word not detected | Lower `SILENCE_THRESHOLD` in config, or speak louder |
 
 ---
 
-## 🍓 Raspberry Pi Setup
-
-### Option A: One-command installer
+## Run on Boot (systemd)
 
 ```bash
-# Copy files to Pi (from your PC)
-scp -r chatbot/ pi@<pi-ip>:/home/pi/chatbot/
-
-# SSH into Pi and run
-ssh pi@<pi-ip>
-cd ~/chatbot
-chmod +x setup_pi.sh
-./setup_pi.sh
-```
-
-The script installs all system packages, Python dependencies, and sets up the systemd service automatically.
-
-> ℹ️ Whisper is **not** installed on Pi (PyTorch is incompatible with ARM). STT and wake-word detection use Google Speech API instead (requires internet).
-
-### Option B: Manual setup
-
-```bash
-# System dependencies
-sudo apt-get update
-sudo apt-get install -y python3 python3-venv python3-pip \
-    python3-pyaudio portaudio19-dev espeak flac ffmpeg
-
-# Python setup
-python3 -m venv .venv
-source .venv/bin/activate
-# ⚠️ Do NOT install openai-whisper on Pi — it crashes on ARM
-pip install edge-tts pygame pyttsx3 SpeechRecognition PyAudio
-
-# Run
-python chatbot.py --daemon
-```
-
-### Systemd Service (auto-start on boot)
-
-```bash
-# Install service
-sudo cp uit-chatbot.service /etc/systemd/system/
+sudo cp systemd/voicebot.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable uit-chatbot
-sudo systemctl start uit-chatbot
-
-# Manage service
-sudo systemctl status uit-chatbot    # Check status
-sudo systemctl stop uit-chatbot      # Stop
-sudo systemctl restart uit-chatbot   # Restart
-journalctl -u uit-chatbot -f         # View live logs
+sudo systemctl enable --now voicebot
+journalctl -u voicebot -f    # watch logs
 ```
-
-> **Note:** Edit `uit-chatbot.service` to update paths and username if your setup differs from the defaults.
-
----
-
-## 🔧 Customization
-
-### Add your own Q&A content
-
-1. Edit `uit.txt` — add questions and answers in this format:
-   ```
-   Q36. Your question here?
-   A: Your answer here.
-   ```
-2. Delete `knowledge_base.json` (it will be regenerated)
-3. Restart the chatbot
-
-### Change the wake word
-
-```bash
-python chatbot.py --daemon --wake-word "hello assistant"
-```
-
-### Adjust matching sensitivity
-
-In `chatbot.py`, modify `UITChatbot.SIMILARITY_THRESHOLD` (lower = more lenient, higher = stricter):
-```python
-SIMILARITY_THRESHOLD = 0.08  # default
-```
-
----
-
-## 📦 Dependencies
-
-| Package | Purpose |
-|---|---|
-| `edge-tts` | Neural TTS with human-like voices (needs internet) |
-| `pygame` | Audio playback for TTS output |
-| `pyttsx3` | Offline TTS fallback (espeak/SAPI5) |
-| `openai-whisper` | Offline speech recognition — **desktop only** (crashes on Pi ARM) |
-| `SpeechRecognition` | Microphone input framework |
-| `PyAudio` | Microphone hardware access |
 
 ---
 
