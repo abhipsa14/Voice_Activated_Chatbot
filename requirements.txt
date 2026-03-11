@@ -33,3 +33,4 @@ pyttsx3                 # Offline fallback TTS (espeak / SAPI5)
 
 # ── RAG Pipeline (optional) ──────────────────────────────────
 sentence-transformers # Semantic embeddings (uncomment for better RAG)
+metaphone

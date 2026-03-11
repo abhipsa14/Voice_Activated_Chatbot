@@ -31,6 +31,11 @@ WAKE_WORD = os.environ.get("WAKE_WORD", "hey uit")
 WAKE_WORD_ALTERNATIVES = [
     "okay uit", "ok u i t", "okay u i t",
     "okay united", "ok united", "hey uit", "hey u i t",
+    # Phonetic variants commonly misheard by Whisper
+    "hey u i tried", "hey you it", "hey you eye tea",
+    "ok you it", "okay you it", "hey u it",
+    "hey uit", "ok uit", "hey u i d",
+    "hey you i t", "ok you i t", "hey u i t e",
 ]
 
 # ── Voice Activity Detection (VAD) ────────────────────────────────────
@@ -56,6 +61,22 @@ WHISPER_MODEL = os.environ.get(
 )
 WHISPER_LANGUAGE = "en"
 WHISPER_THREADS = int(os.environ.get("WHISPER_THREADS", "4"))
+
+# Domain-vocabulary prompt fed to Whisper to bias recognition toward UIT terms
+WHISPER_INITIAL_PROMPT = os.environ.get("WHISPER_INITIAL_PROMPT", (
+    "UIT, United Institute of Technology, Prayagraj, AKTU, AICTE, "
+    "hostel, placement, principal, Sanjay Srivastava, Abhishek Malviya, "
+    "Shruti Sharma, Amit Kumar Tiwari, Amitabh Srivastava, Ankit Kumar Gupta, "
+    "hey UIT, ok UIT, Dean Academics, HOD, Computer Science, Electronics, "
+    "United Group of Institutions, campus, library, seminar, workshop, "
+    "internship, ERP, Wi-Fi, CCTV, ragging, counseling, innovation"
+))
+
+# Contextual post-processing for STT
+STT_CONTEXT_ENABLED = os.environ.get(
+    "STT_CONTEXT_ENABLED", "true"
+).lower() in ("1", "true", "yes")
+STT_CONTEXT_WINDOW = int(os.environ.get("STT_CONTEXT_WINDOW", "5"))
 
 # ── LLM (Ollama) ──────────────────────────────────────────────────────
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")

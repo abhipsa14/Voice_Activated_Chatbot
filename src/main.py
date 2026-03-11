@@ -42,16 +42,65 @@ def _args():
     return p.parse_args()
 
 
-# ── Wake-word matching (fuzzy) ─────────────────────────────────────────
+# ── Wake-word matching (phonetic + fuzzy) ──────────────────────────────
 
 def _normalise(text: str) -> str:
     return re.sub(r"[^\w\s]", "", text.lower()).strip()
 
 
+def _levenshtein(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # insertion, deletion, substitution
+            curr_row.append(min(
+                prev_row[j + 1] + 1,
+                curr_row[j] + 1,
+                prev_row[j] + (0 if c1 == c2 else 1),
+            ))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def _phonetic_encode(text: str) -> str:
+    """Get phonetic encoding of text using Metaphone (if available)."""
+    try:
+        from metaphone import doublemetaphone
+        words = text.split()
+        codes = []
+        for w in words:
+            primary, secondary = doublemetaphone(w)
+            codes.append(primary or secondary or w)
+        return " ".join(codes)
+    except ImportError:
+        # Fallback: simple phonetic normalization without metaphone
+        t = text.lower()
+        # Common phonetic simplifications
+        t = re.sub(r"\btried\b", "t", t)
+        t = re.sub(r"\byou\b", "u", t)
+        t = re.sub(r"\beye\b", "i", t)
+        t = re.sub(r"\btea\b", "t", t)
+        t = re.sub(r"\bwrite\b", "rit", t)
+        return t
+
+
 def _wake_match(text: str, wake: str) -> bool:
-    """Fuzzy check: does *text* contain the wake phrase?"""
+    """
+    Check if *text* contains the wake phrase using:
+      1. Fast substring match (original approach)
+      2. Phonetic-code comparison (Metaphone)
+      3. Levenshtein distance on phonetic codes (fallback)
+    """
     tn = _normalise(text)
     phrases = [wake] + WAKE_WORD_ALTERNATIVES
+
+    # 1. Fast path: exact substring match
     for phrase in phrases:
         pn = _normalise(phrase)
         if pn in tn:
@@ -61,7 +110,31 @@ def _wake_match(text: str, wake: str) -> bool:
         tw = tn.split()
         if all(any(p in t or t in p for t in tw) for p in pw):
             return True
+
+    # 2. Phonetic matching
+    text_phonetic = _phonetic_encode(tn)
+    wake_phonetic = _phonetic_encode(_normalise(wake))
+
+    # Direct phonetic substring match
+    if wake_phonetic and wake_phonetic in text_phonetic:
+        return True
+
+    # 3. Levenshtein distance on phonetic codes (threshold ≤ 2)
+    if wake_phonetic and text_phonetic:
+        # Check if any contiguous slice of text_phonetic is close to wake_phonetic
+        tp_words = text_phonetic.split()
+        wp_words = wake_phonetic.split()
+        wp_joined = "".join(wp_words)
+        # Sliding window over text phonetic words
+        for i in range(len(tp_words)):
+            for j in range(i + 1, min(i + len(wp_words) + 2, len(tp_words) + 1)):
+                chunk = "".join(tp_words[i:j])
+                dist = _levenshtein(chunk, wp_joined)
+                if dist <= 2:
+                    return True
+
     return False
+
 
 
 # ── Banner ─────────────────────────────────────────────────────────────
