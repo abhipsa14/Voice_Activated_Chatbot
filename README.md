@@ -1,4 +1,4 @@
-# 🎓 UIT Prayagraj Voice Chatbot
+# United Institute Technology, Prayagraj Voice Chatbot
 
 A Voice-enabled fully offline voice assistant for **United Institute of Technology, Prayagraj** — runs on a Raspberry Pi 4/5.
 **No cloud, no API keys, no internet required after setup.**
